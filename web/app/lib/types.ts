@@ -11,6 +11,7 @@ export interface Project {
   database: Database
   cache: Cache
   repo_url?: string
+  argocd_app?: string
   status: ProjectStatus
   created_at: string
   updated_at: string

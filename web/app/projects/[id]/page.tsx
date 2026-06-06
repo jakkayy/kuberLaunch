@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { getProject, getProjectFiles } from '@/app/lib/api'
 import FileViewer from './FileViewer'
 import ConnectGitHub from './ConnectGitHub'
+import RegisterArgoCD from './RegisterArgoCD'
 
 const RUNTIME_LABEL: Record<string, string> = {
   go: 'Go', nextjs: 'Next.js', nestjs: 'NestJS', fastapi: 'FastAPI',
@@ -51,6 +52,11 @@ export default async function ProjectPage({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <RegisterArgoCD
+            projectId={id}
+            argocdApp={project.argocd_app ?? ''}
+            hasRepo={!!project.repo_url}
+          />
           <ConnectGitHub projectId={id} repoUrl={project.repo_url ?? ''} />
           <a
             href={`/api/projects/${id}/download`}
@@ -64,9 +70,9 @@ export default async function ProjectPage({
 
       {/* GitHub repo link */}
       {project.repo_url && (
-        <div className="flex items-center gap-2 mb-5 px-4 py-3 bg-green-50 border border-green-200 rounded-lg">
+        <div className="flex items-center gap-2 mb-2 px-4 py-3 bg-green-50 border border-green-200 rounded-lg">
           <span className="text-green-600 text-sm">●</span>
-          <span className="text-sm text-zinc-600">Connected to GitHub:</span>
+          <span className="text-sm text-zinc-600">GitHub:</span>
           <a
             href={project.repo_url}
             target="_blank"
@@ -75,6 +81,23 @@ export default async function ProjectPage({
           >
             {project.repo_url.replace('https://github.com/', '')}
           </a>
+        </div>
+      )}
+
+      {/* ArgoCD application link */}
+      {project.argocd_app && (
+        <div className="flex items-center gap-2 mb-5 px-4 py-3 bg-purple-50 border border-purple-200 rounded-lg">
+          <span className="text-purple-600 text-sm">●</span>
+          <span className="text-sm text-zinc-600">ArgoCD:</span>
+          <a
+            href="http://argocd.localhost:8090"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-mono text-purple-700 hover:underline"
+          >
+            {project.argocd_app}
+          </a>
+          <span className="text-xs text-zinc-400 ml-1">— GitOps sync enabled</span>
         </div>
       )}
 
