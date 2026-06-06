@@ -121,3 +121,55 @@ func (c *Client) RegisterApp(ctx context.Context, slug, repoURL string) (string,
 
 	return slug, nil
 }
+
+// AppStatus holds the health and sync state of an ArgoCD application.
+type AppStatus struct {
+	Health string // Healthy | Progressing | Degraded | Suspended | Missing | Unknown
+	Sync   string // Synced | OutOfSync | Unknown
+}
+
+// GetAppStatus returns the current health and sync status of an ArgoCD app.
+func (c *Client) GetAppStatus(ctx context.Context, appName string) (*AppStatus, error) {
+	token, err := c.login(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		c.baseURL+"/api/v1/applications/"+appName, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Host = "argocd.localhost"
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("argocd get app: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("argocd get app %d: %s", resp.StatusCode, string(b))
+	}
+
+	var result struct {
+		Status struct {
+			Health struct {
+				Status string `json:"status"`
+			} `json:"health"`
+			Sync struct {
+				Status string `json:"status"`
+			} `json:"sync"`
+		} `json:"status"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("argocd get app decode: %w", err)
+	}
+
+	return &AppStatus{
+		Health: result.Status.Health.Status,
+		Sync:   result.Status.Sync.Status,
+	}, nil
+}

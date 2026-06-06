@@ -46,10 +46,13 @@ func main() {
 	}
 
 	projectRepo := repository.NewProjectRepository(database)
+	deployRepo := repository.NewDeploymentRepository(database)
 	projectSvc := service.NewProjectService(projectRepo, githubClient, argocdClient)
+	deploymentSvc := service.NewDeploymentService(deployRepo, projectRepo, githubClient, argocdClient)
 	projectHandler := handler.NewProjectHandler(projectSvc)
 	repoHandler := handler.NewRepoHandler(projectSvc)
 	argocdHandler := handler.NewArgoCDHandler(projectSvc)
+	deploymentHandler := handler.NewDeploymentHandler(deploymentSvc, projectSvc)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -70,7 +73,12 @@ func main() {
 		projects.GET("/:id/download", projectHandler.Download)
 		projects.GET("/:id/preview", projectHandler.Preview)
 		projects.POST("/:id/repo", repoHandler.Connect)
+		projects.POST("/:id/repo/repair", repoHandler.Repair)
 		projects.POST("/:id/argocd", argocdHandler.Register)
+		projects.POST("/:id/deployments", deploymentHandler.Trigger)
+		projects.GET("/:id/deployments", deploymentHandler.List)
+		projects.GET("/:id/deployments/:dep_id", deploymentHandler.Get)
+		projects.GET("/:id/deployments/:dep_id/stream", deploymentHandler.Stream)
 	}
 
 	srv := &http.Server{
