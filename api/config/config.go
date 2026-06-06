@@ -14,6 +14,7 @@ type Config struct {
 	GitHub  GitHubConfig
 	ArgoCD  ArgoCDConfig
 	Grafana GrafanaConfig
+	Vault   VaultConfig
 }
 
 type ArgoCDConfig struct {
@@ -26,6 +27,11 @@ type GrafanaConfig struct {
 	URL      string
 	Username string
 	Password string
+}
+
+type VaultConfig struct {
+	URL   string
+	Token string
 }
 
 type GitHubConfig struct {
@@ -72,6 +78,10 @@ func Load() *Config {
 			URL:      getEnv("GRAFANA_URL", "http://grafana.localhost:8090"),
 			Username: getEnv("GRAFANA_USERNAME", "admin"),
 			Password: getEnv("GRAFANA_PASSWORD", "admin"),
+		},
+		Vault: VaultConfig{
+			URL:   getEnv("VAULT_URL", "http://vault.localhost:8090"),
+			Token: getEnv("VAULT_TOKEN", "root"),
 		},
 	}
 }
