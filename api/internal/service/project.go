@@ -157,18 +157,23 @@ func (s *ProjectService) ConnectGitHub(ctx context.Context, id string) (string, 
 		return "", fmt.Errorf("GitHub integration not configured (GITHUB_TOKEN missing)")
 	}
 
-	if s.github.RepoExists(ctx, p.Slug) {
-		return "", fmt.Errorf("GitHub repo %q already exists", p.Slug)
-	}
-
 	files, err := generator.Generate(p)
 	if err != nil {
 		return "", fmt.Errorf("generate files: %w", err)
 	}
 
-	repoURL, err := s.github.CreateRepo(ctx, p.Slug, files)
-	if err != nil {
-		return "", fmt.Errorf("create GitHub repo: %w", err)
+	var repoURL string
+	if s.github.RepoExists(ctx, p.Slug) {
+		// Repo มีอยู่แล้ว (สร้างก่อนหน้านี้) — link และ re-push ไฟล์
+		repoURL = fmt.Sprintf("https://github.com/%s/%s", s.github.Owner(), p.Slug)
+		if err := s.github.PushFiles(ctx, p.Slug, files); err != nil {
+			return "", fmt.Errorf("re-push files: %w", err)
+		}
+	} else {
+		repoURL, err = s.github.CreateRepo(ctx, p.Slug, files)
+		if err != nil {
+			return "", fmt.Errorf("create GitHub repo: %w", err)
+		}
 	}
 
 	if err := s.repo.SetRepoURL(ctx, id, repoURL); err != nil {

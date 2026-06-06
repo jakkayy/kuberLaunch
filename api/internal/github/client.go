@@ -47,10 +47,11 @@ func (c *Client) CreateRepo(ctx context.Context, slug string, files []generator.
 // pushFiles commits all generated files to the repo in a single commit
 // using the Git Tree API. Assumes repo was created with AutoInit=true.
 func (c *Client) pushFiles(ctx context.Context, repo string, files []generator.GeneratedFile) error {
-	// Get the latest commit SHA on main (created by AutoInit)
+	// Get the latest commit SHA on main — empty repo won't have this ref
 	ref, _, err := c.gh.Git.GetRef(ctx, c.owner, repo, "refs/heads/main")
 	if err != nil {
-		return fmt.Errorf("get ref: %w", err)
+		// Empty repo: ใช้ Contents API (รองรับ repo ที่ยังไม่มี commit)
+		return c.pushFilesViaContents(ctx, repo, files)
 	}
 	parentSHA := ref.Object.GetSHA()
 
@@ -74,24 +75,20 @@ func (c *Client) pushFiles(ctx context.Context, repo string, files []generator.G
 		})
 	}
 
-	// Create tree on top of existing tree
 	tree, _, err := c.gh.Git.CreateTree(ctx, c.owner, repo, "", treeEntries)
 	if err != nil {
 		return fmt.Errorf("create tree: %w", err)
 	}
 
-	// Create commit with parent (the AutoInit commit)
-	parentCommit := &gh.Commit{SHA: gh.String(parentSHA)}
 	commit, _, err := c.gh.Git.CreateCommit(ctx, c.owner, repo, &gh.Commit{
 		Message: gh.String("chore: initial project scaffold by kuberLaunch"),
 		Tree:    tree,
-		Parents: []*gh.Commit{parentCommit},
+		Parents: []*gh.Commit{{SHA: gh.String(parentSHA)}},
 	}, &gh.CreateCommitOptions{})
 	if err != nil {
 		return fmt.Errorf("create commit: %w", err)
 	}
 
-	// Update main branch to point to new commit
 	force := true
 	_, _, err = c.gh.Git.UpdateRef(ctx, c.owner, repo, &gh.Reference{
 		Ref:    gh.String("refs/heads/main"),
@@ -99,6 +96,23 @@ func (c *Client) pushFiles(ctx context.Context, repo string, files []generator.G
 	}, force)
 	return err
 }
+
+// pushFilesViaContents pushes files one-by-one using the Contents API.
+// Used for empty repos where the Git Trees API is unavailable.
+func (c *Client) pushFilesViaContents(ctx context.Context, repo string, files []generator.GeneratedFile) error {
+	for _, f := range files {
+		_, _, err := c.gh.Repositories.CreateFile(ctx, c.owner, repo, f.Path, &gh.RepositoryContentFileOptions{
+			Message: gh.String("chore: initial project scaffold by kuberLaunch"),
+			Content: []byte(f.Content),
+		})
+		if err != nil {
+			return fmt.Errorf("create file %s: %w", f.Path, err)
+		}
+	}
+	return nil
+}
+
+func (c *Client) Owner() string { return c.owner }
 
 // PushFiles pushes all generated files to an existing repo as a new commit.
 func (c *Client) PushFiles(ctx context.Context, slug string, files []generator.GeneratedFile) error {
