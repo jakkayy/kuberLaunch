@@ -1,4 +1,4 @@
-import { GeneratedFile, Project } from './types'
+import { Deployment, GeneratedFile, Project } from './types'
 
 const API_URL = process.env.API_URL ?? 'http://localhost:8080'
 
@@ -20,4 +20,11 @@ export async function getProjectFiles(id: string): Promise<GeneratedFile[]> {
   if (!res.ok) return []
   const data = await res.json()
   return data.files ?? []
+}
+
+export async function getDeployments(id: string): Promise<Deployment[]> {
+  const res = await fetch(`${API_URL}/api/v1/projects/${id}/deployments`, { cache: 'no-store' })
+  if (!res.ok) return []
+  const data = await res.json()
+  return data.deployments ?? []
 }

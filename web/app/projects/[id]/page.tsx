@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { getProject, getProjectFiles } from '@/app/lib/api'
+import { getProject, getProjectFiles, getDeployments } from '@/app/lib/api'
 import FileViewer from './FileViewer'
 import ConnectGitHub from './ConnectGitHub'
 import RegisterArgoCD from './RegisterArgoCD'
+import DeployButton from './DeployButton'
+import DeploymentHistory from './DeploymentHistory'
 
 const RUNTIME_LABEL: Record<string, string> = {
   go: 'Go', nextjs: 'Next.js', nestjs: 'NestJS', fastapi: 'FastAPI',
@@ -21,7 +23,11 @@ export default async function ProjectPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const [project, files] = await Promise.all([getProject(id), getProjectFiles(id)])
+  const [project, files, deployments] = await Promise.all([
+    getProject(id),
+    getProjectFiles(id),
+    getDeployments(id),
+  ])
 
   if (!project) notFound()
 
@@ -30,6 +36,8 @@ export default async function ProjectPage({
     project.database !== 'none' ? project.database : null,
     project.cache !== 'none' ? project.cache : null,
   ].filter(Boolean).join(' · ')
+
+  const latestDeployment = deployments[0]
 
   return (
     <div>
@@ -61,14 +69,14 @@ export default async function ProjectPage({
           <a
             href={`/api/projects/${id}/download`}
             download
-            className="bg-zinc-900 text-white text-sm font-medium px-4 py-2 rounded hover:bg-zinc-700 transition-colors"
+            className="border border-zinc-300 text-zinc-700 text-sm font-medium px-4 py-2 rounded hover:bg-zinc-50 transition-colors"
           >
             Download zip
           </a>
         </div>
       </div>
 
-      {/* GitHub repo link */}
+      {/* Status banners */}
       {project.repo_url && (
         <div className="flex items-center gap-2 mb-2 px-4 py-3 bg-green-50 border border-green-200 rounded-lg">
           <span className="text-green-600 text-sm">●</span>
@@ -84,7 +92,6 @@ export default async function ProjectPage({
         </div>
       )}
 
-      {/* ArgoCD application link */}
       {project.argocd_app && (
         <div className="flex items-center gap-2 mb-5 px-4 py-3 bg-purple-50 border border-purple-200 rounded-lg">
           <span className="text-purple-600 text-sm">●</span>
@@ -101,6 +108,20 @@ export default async function ProjectPage({
         </div>
       )}
 
+      {/* Deploy section */}
+      <div className="mb-6 border border-zinc-200 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-zinc-700">Deployments</h2>
+          <DeployButton
+            projectId={id}
+            hasRepo={!!project.repo_url}
+            latestDeployment={latestDeployment}
+          />
+        </div>
+        <DeploymentHistory deployments={deployments} />
+      </div>
+
+      {/* Generated files */}
       {files.length > 0 ? (
         <FileViewer files={files} />
       ) : (

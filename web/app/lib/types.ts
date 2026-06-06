@@ -21,3 +21,17 @@ export interface GeneratedFile {
   path: string
   content: string
 }
+
+export type DeploymentStatus = 'pending' | 'building' | 'deploying' | 'success' | 'failed'
+
+export interface Deployment {
+  id: string
+  project_id: string
+  branch: string
+  workflow_run_id?: number
+  image?: string
+  triggered_by: string
+  status: DeploymentStatus
+  created_at: string
+  updated_at: string
+}
