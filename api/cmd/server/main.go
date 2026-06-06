@@ -19,6 +19,7 @@ import (
 	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
 	"github.com/jakkayy/kuberlauncher/api/internal/service"
+	"github.com/jakkayy/kuberlauncher/api/internal/vault"
 )
 
 func main() {
@@ -52,15 +53,24 @@ func main() {
 		log.Printf("Grafana integration enabled (%s)", cfg.Grafana.URL)
 	}
 
+	var vaultClient *vault.Client
+	if cfg.Vault.Token != "" {
+		vaultClient = vault.New(cfg.Vault.URL, cfg.Vault.Token)
+		log.Printf("Vault integration enabled (%s)", cfg.Vault.URL)
+	}
+
 	projectRepo := repository.NewProjectRepository(database)
 	deployRepo := repository.NewDeploymentRepository(database)
 	projectSvc := service.NewProjectService(projectRepo, githubClient, argocdClient, grafanaClient)
 	deploymentSvc := service.NewDeploymentService(deployRepo, projectRepo, githubClient, argocdClient)
+	secretSvc := service.NewSecretService(projectRepo, vaultClient)
 	projectHandler := handler.NewProjectHandler(projectSvc)
 	repoHandler := handler.NewRepoHandler(projectSvc)
 	argocdHandler := handler.NewArgoCDHandler(projectSvc)
 	monitoringHandler := handler.NewMonitoringHandler(projectSvc)
+	setupHandler := handler.NewSetupHandler(projectSvc)
 	deploymentHandler := handler.NewDeploymentHandler(deploymentSvc, projectSvc)
+	secretHandler := handler.NewSecretHandler(secretSvc)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -84,10 +94,14 @@ func main() {
 		projects.POST("/:id/repo/repair", repoHandler.Repair)
 		projects.POST("/:id/argocd", argocdHandler.Register)
 		projects.POST("/:id/monitoring", monitoringHandler.Setup)
+		projects.GET("/:id/setup/stream", setupHandler.Stream)
 		projects.POST("/:id/deployments", deploymentHandler.Trigger)
 		projects.GET("/:id/deployments", deploymentHandler.List)
 		projects.GET("/:id/deployments/:dep_id", deploymentHandler.Get)
 		projects.GET("/:id/deployments/:dep_id/stream", deploymentHandler.Stream)
+		projects.POST("/:id/secrets", secretHandler.Set)
+		projects.GET("/:id/secrets", secretHandler.ListKeys)
+		projects.DELETE("/:id/secrets/:key", secretHandler.Delete)
 	}
 
 	srv := &http.Server{
