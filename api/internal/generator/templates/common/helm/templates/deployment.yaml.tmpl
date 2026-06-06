@@ -23,8 +23,7 @@ spec:
           env: {{ "{{" }}- toYaml .Values.env | nindent 12 {{ "}}" }}
           resources: {{ "{{" }}- toYaml .Values.resources | nindent 12 {{ "}}" }}
           readinessProbe:
-            httpGet:
-              path: /health
+            tcpSocket:
               port: {{ .Port }}
             initialDelaySeconds: 5
             periodSeconds: 10
