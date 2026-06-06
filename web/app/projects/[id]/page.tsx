@@ -6,6 +6,7 @@ import ConnectGitHub from './ConnectGitHub'
 import RegisterArgoCD from './RegisterArgoCD'
 import DeployButton from './DeployButton'
 import DeploymentHistory from './DeploymentHistory'
+import SetupMonitoring from './SetupMonitoring'
 
 const RUNTIME_LABEL: Record<string, string> = {
   go: 'Go', nextjs: 'Next.js', nestjs: 'NestJS', fastapi: 'FastAPI',
@@ -60,6 +61,7 @@ export default async function ProjectPage({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <SetupMonitoring projectId={id} grafanaUrl={project.grafana_url ?? ''} />
           <RegisterArgoCD
             projectId={id}
             argocdApp={project.argocd_app ?? ''}

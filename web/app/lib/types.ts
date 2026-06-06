@@ -12,6 +12,7 @@ export interface Project {
   cache: Cache
   repo_url?: string
   argocd_app?: string
+  grafana_url?: string
   status: ProjectStatus
   created_at: string
   updated_at: string
