@@ -7,18 +7,20 @@ import (
 	"github.com/jakkayy/kuberlauncher/api/internal/argocd"
 	"github.com/jakkayy/kuberlauncher/api/internal/generator"
 	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
+	"github.com/jakkayy/kuberlauncher/api/internal/grafana"
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
 )
 
 type ProjectService struct {
-	repo   *repository.ProjectRepository
-	github *gh.Client
-	argocd *argocd.Client
+	repo    *repository.ProjectRepository
+	github  *gh.Client
+	argocd  *argocd.Client
+	grafana *grafana.Client
 }
 
-func NewProjectService(repo *repository.ProjectRepository, github *gh.Client, argocd *argocd.Client) *ProjectService {
-	return &ProjectService{repo: repo, github: github, argocd: argocd}
+func NewProjectService(repo *repository.ProjectRepository, github *gh.Client, argocd *argocd.Client, grafana *grafana.Client) *ProjectService {
+	return &ProjectService{repo: repo, github: github, argocd: argocd, grafana: grafana}
 }
 
 func (s *ProjectService) Create(ctx context.Context, req model.CreateProjectRequest) (*model.Project, []generator.GeneratedFile, error) {
@@ -91,6 +93,35 @@ func (s *ProjectService) Preview(ctx context.Context, id string) ([]generator.Ge
 		return nil, err
 	}
 	return generator.Generate(p)
+}
+
+func (s *ProjectService) SetupMonitoring(ctx context.Context, id string) (string, error) {
+	p, err := s.GetByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if p.GrafanaURL != "" {
+		return p.GrafanaURL, nil
+	}
+	if s.grafana == nil {
+		return "", fmt.Errorf("Grafana integration not configured (GRAFANA_PASSWORD missing)")
+	}
+
+	folderUID, err := s.grafana.EnsureFolder(ctx, p.Slug)
+	if err != nil {
+		return "", fmt.Errorf("create folder: %w", err)
+	}
+
+	dashURL, err := s.grafana.CreateDashboard(ctx, p.Slug, folderUID)
+	if err != nil {
+		return "", fmt.Errorf("create dashboard: %w", err)
+	}
+
+	fullURL := "http://grafana.localhost:8090" + dashURL
+	if err := s.repo.SetGrafanaURL(ctx, id, fullURL); err != nil {
+		return fullURL, err
+	}
+	return fullURL, nil
 }
 
 // RepairGitHub re-pushes all generated files to the existing GitHub repo.

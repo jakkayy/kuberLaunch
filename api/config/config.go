@@ -8,14 +8,21 @@ import (
 )
 
 type Config struct {
-	Port   string
-	Env    string
-	DB     DBConfig
-	GitHub GitHubConfig
-	ArgoCD ArgoCDConfig
+	Port    string
+	Env     string
+	DB      DBConfig
+	GitHub  GitHubConfig
+	ArgoCD  ArgoCDConfig
+	Grafana GrafanaConfig
 }
 
 type ArgoCDConfig struct {
+	URL      string
+	Username string
+	Password string
+}
+
+type GrafanaConfig struct {
 	URL      string
 	Username string
 	Password string
@@ -60,6 +67,11 @@ func Load() *Config {
 			URL:      getEnv("ARGOCD_URL", "http://argocd.localhost:8090"),
 			Username: getEnv("ARGOCD_USERNAME", "admin"),
 			Password: getEnv("ARGOCD_PASSWORD", ""),
+		},
+		Grafana: GrafanaConfig{
+			URL:      getEnv("GRAFANA_URL", "http://grafana.localhost:8090"),
+			Username: getEnv("GRAFANA_USERNAME", "admin"),
+			Password: getEnv("GRAFANA_PASSWORD", "admin"),
 		},
 	}
 }

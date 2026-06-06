@@ -14,6 +14,7 @@ import (
 	"github.com/jakkayy/kuberlauncher/api/config"
 	"github.com/jakkayy/kuberlauncher/api/internal/argocd"
 	"github.com/jakkayy/kuberlauncher/api/internal/db"
+	"github.com/jakkayy/kuberlauncher/api/internal/grafana"
 	"github.com/jakkayy/kuberlauncher/api/internal/handler"
 	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
@@ -45,13 +46,20 @@ func main() {
 		log.Printf("ArgoCD integration enabled (%s)", cfg.ArgoCD.URL)
 	}
 
+	var grafanaClient *grafana.Client
+	if cfg.Grafana.Password != "" {
+		grafanaClient = grafana.New(cfg.Grafana.URL, cfg.Grafana.Username, cfg.Grafana.Password)
+		log.Printf("Grafana integration enabled (%s)", cfg.Grafana.URL)
+	}
+
 	projectRepo := repository.NewProjectRepository(database)
 	deployRepo := repository.NewDeploymentRepository(database)
-	projectSvc := service.NewProjectService(projectRepo, githubClient, argocdClient)
+	projectSvc := service.NewProjectService(projectRepo, githubClient, argocdClient, grafanaClient)
 	deploymentSvc := service.NewDeploymentService(deployRepo, projectRepo, githubClient, argocdClient)
 	projectHandler := handler.NewProjectHandler(projectSvc)
 	repoHandler := handler.NewRepoHandler(projectSvc)
 	argocdHandler := handler.NewArgoCDHandler(projectSvc)
+	monitoringHandler := handler.NewMonitoringHandler(projectSvc)
 	deploymentHandler := handler.NewDeploymentHandler(deploymentSvc, projectSvc)
 
 	if cfg.Env == "production" {
@@ -75,6 +83,7 @@ func main() {
 		projects.POST("/:id/repo", repoHandler.Connect)
 		projects.POST("/:id/repo/repair", repoHandler.Repair)
 		projects.POST("/:id/argocd", argocdHandler.Register)
+		projects.POST("/:id/monitoring", monitoringHandler.Setup)
 		projects.POST("/:id/deployments", deploymentHandler.Trigger)
 		projects.GET("/:id/deployments", deploymentHandler.List)
 		projects.GET("/:id/deployments/:dep_id", deploymentHandler.Get)

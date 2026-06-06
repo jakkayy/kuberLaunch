@@ -35,6 +35,7 @@ type Project struct {
 	Cache      Cache         `json:"cache" db:"cache"`
 	RepoURL    string        `json:"repo_url,omitempty" db:"repo_url"`
 	ArgocdApp  string        `json:"argocd_app,omitempty" db:"argocd_app"`
+	GrafanaURL string        `json:"grafana_url,omitempty" db:"grafana_url"`
 	Status     ProjectStatus `json:"status" db:"status"`
 	CreatedAt  time.Time     `json:"created_at" db:"created_at"`
 	UpdatedAt  time.Time     `json:"updated_at" db:"updated_at"`

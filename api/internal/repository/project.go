@@ -29,11 +29,11 @@ func (r *ProjectRepository) Create(ctx context.Context, p *model.Project) error 
 
 func (r *ProjectRepository) FindByID(ctx context.Context, id string) (*model.Project, error) {
 	var p model.Project
-	query := `SELECT id, name, slug, runtime, database, cache, repo_url, argocd_app, status, created_at, updated_at
+	query := `SELECT id, name, slug, runtime, database, cache, repo_url, argocd_app, grafana_url, status, created_at, updated_at
 	          FROM projects WHERE id = $1`
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&p.ID, &p.Name, &p.Slug, &p.Runtime, &p.Database,
-		&p.Cache, &p.RepoURL, &p.ArgocdApp, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+		&p.Cache, &p.RepoURL, &p.ArgocdApp, &p.GrafanaURL, &p.Status, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -42,7 +42,7 @@ func (r *ProjectRepository) FindByID(ctx context.Context, id string) (*model.Pro
 }
 
 func (r *ProjectRepository) FindAll(ctx context.Context) ([]model.Project, error) {
-	query := `SELECT id, name, slug, runtime, database, cache, repo_url, argocd_app, status, created_at, updated_at
+	query := `SELECT id, name, slug, runtime, database, cache, repo_url, argocd_app, grafana_url, status, created_at, updated_at
 	          FROM projects ORDER BY created_at DESC`
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
@@ -55,7 +55,7 @@ func (r *ProjectRepository) FindAll(ctx context.Context) ([]model.Project, error
 		var p model.Project
 		if err := rows.Scan(
 			&p.ID, &p.Name, &p.Slug, &p.Runtime, &p.Database,
-			&p.Cache, &p.RepoURL, &p.ArgocdApp, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+			&p.Cache, &p.RepoURL, &p.ArgocdApp, &p.GrafanaURL, &p.Status, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -68,6 +68,13 @@ func (r *ProjectRepository) SetRepoURL(ctx context.Context, id, repoURL string) 
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE projects SET repo_url = $1, updated_at = NOW() WHERE id = $2`,
 		repoURL, id)
+	return err
+}
+
+func (r *ProjectRepository) SetGrafanaURL(ctx context.Context, id, grafanaURL string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE projects SET grafana_url = $1, updated_at = NOW() WHERE id = $2`,
+		grafanaURL, id)
 	return err
 }
 
