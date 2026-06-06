@@ -1,0 +1,30 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/org/{{ .Slug }}
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: {{ .Port }}
+
+ingress:
+  enabled: true
+  className: nginx
+  host: {{ .Slug }}.local
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+env: []
+# - name: DATABASE_URL
+#   valueFrom:
+#     secretKeyRef:
+#       name: {{ .Slug }}-secrets
+#       key: DATABASE_URL
