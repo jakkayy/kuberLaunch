@@ -8,9 +8,15 @@ import (
 )
 
 type Config struct {
-	Port string
-	Env  string
-	DB   DBConfig
+	Port   string
+	Env    string
+	DB     DBConfig
+	GitHub GitHubConfig
+}
+
+type GitHubConfig struct {
+	Token string
+	Owner string
 }
 
 type DBConfig struct {
@@ -38,6 +44,10 @@ func Load() *Config {
 			User:     getEnv("DB_USER", "kuberlauncher"),
 			Password: getEnv("DB_PASSWORD", "kuberlauncher"),
 			Name:     getEnv("DB_NAME", "kuberlauncher"),
+		},
+		GitHub: GitHubConfig{
+			Token: getEnv("GITHUB_TOKEN", ""),
+			Owner: getEnv("GITHUB_OWNER", ""),
 		},
 	}
 }

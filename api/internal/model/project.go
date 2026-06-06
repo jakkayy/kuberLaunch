@@ -27,16 +27,17 @@ const (
 )
 
 type Project struct {
-	ID        string        `json:"id" db:"id"`
-	Name      string        `json:"name" db:"name"`
-	Slug      string        `json:"slug" db:"slug"`
-	Runtime   Runtime       `json:"runtime" db:"runtime"`
-	Database  Database      `json:"database" db:"database"`
-	Cache     Cache         `json:"cache" db:"cache"`
-	RepoURL   string        `json:"repo_url,omitempty" db:"repo_url"`
-	Status    ProjectStatus `json:"status" db:"status"`
-	CreatedAt time.Time     `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time     `json:"updated_at" db:"updated_at"`
+	ID         string        `json:"id" db:"id"`
+	Name       string        `json:"name" db:"name"`
+	Slug       string        `json:"slug" db:"slug"`
+	Runtime    Runtime       `json:"runtime" db:"runtime"`
+	Database   Database      `json:"database" db:"database"`
+	Cache      Cache         `json:"cache" db:"cache"`
+	RepoURL    string        `json:"repo_url,omitempty" db:"repo_url"`
+	ArgocdApp  string        `json:"argocd_app,omitempty" db:"argocd_app"`
+	Status     ProjectStatus `json:"status" db:"status"`
+	CreatedAt  time.Time     `json:"created_at" db:"created_at"`
+	UpdatedAt  time.Time     `json:"updated_at" db:"updated_at"`
 }
 
 type CreateProjectRequest struct {

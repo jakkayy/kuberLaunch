@@ -5,16 +5,18 @@ import (
 	"fmt"
 
 	"github.com/jakkayy/kuberlauncher/api/internal/generator"
+	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
 )
 
 type ProjectService struct {
-	repo *repository.ProjectRepository
+	repo   *repository.ProjectRepository
+	github *gh.Client
 }
 
-func NewProjectService(repo *repository.ProjectRepository) *ProjectService {
-	return &ProjectService{repo: repo}
+func NewProjectService(repo *repository.ProjectRepository, github *gh.Client) *ProjectService {
+	return &ProjectService{repo: repo, github: github}
 }
 
 func (s *ProjectService) Create(ctx context.Context, req model.CreateProjectRequest) (*model.Project, []generator.GeneratedFile, error) {
@@ -87,4 +89,39 @@ func (s *ProjectService) Preview(ctx context.Context, id string) ([]generator.Ge
 		return nil, err
 	}
 	return generator.Generate(p)
+}
+
+func (s *ProjectService) ConnectGitHub(ctx context.Context, id string) (string, error) {
+	p, err := s.GetByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+
+	if p.RepoURL != "" {
+		return p.RepoURL, nil
+	}
+
+	if s.github == nil {
+		return "", fmt.Errorf("GitHub integration not configured (GITHUB_TOKEN missing)")
+	}
+
+	if s.github.RepoExists(ctx, p.Slug) {
+		return "", fmt.Errorf("GitHub repo %q already exists", p.Slug)
+	}
+
+	files, err := generator.Generate(p)
+	if err != nil {
+		return "", fmt.Errorf("generate files: %w", err)
+	}
+
+	repoURL, err := s.github.CreateRepo(ctx, p.Slug, files)
+	if err != nil {
+		return "", fmt.Errorf("create GitHub repo: %w", err)
+	}
+
+	if err := s.repo.SetRepo(ctx, id, repoURL, p.Slug); err != nil {
+		return repoURL, err
+	}
+
+	return repoURL, nil
 }

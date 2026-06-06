@@ -14,6 +14,7 @@ import (
 	"github.com/jakkayy/kuberlauncher/api/config"
 	"github.com/jakkayy/kuberlauncher/api/internal/db"
 	"github.com/jakkayy/kuberlauncher/api/internal/handler"
+	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
 	"github.com/jakkayy/kuberlauncher/api/internal/service"
 )
@@ -31,9 +32,16 @@ func main() {
 		log.Fatalf("migrate: %v", err)
 	}
 
+	var githubClient *gh.Client
+	if cfg.GitHub.Token != "" && cfg.GitHub.Owner != "" {
+		githubClient = gh.New(cfg.GitHub.Token, cfg.GitHub.Owner)
+		log.Printf("GitHub integration enabled (owner: %s)", cfg.GitHub.Owner)
+	}
+
 	projectRepo := repository.NewProjectRepository(database)
-	projectSvc := service.NewProjectService(projectRepo)
+	projectSvc := service.NewProjectService(projectRepo, githubClient)
 	projectHandler := handler.NewProjectHandler(projectSvc)
+	repoHandler := handler.NewRepoHandler(projectSvc)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -53,6 +61,7 @@ func main() {
 		projects.DELETE("/:id", projectHandler.Delete)
 		projects.GET("/:id/download", projectHandler.Download)
 		projects.GET("/:id/preview", projectHandler.Preview)
+		projects.POST("/:id/repo", repoHandler.Connect)
 	}
 
 	srv := &http.Server{
