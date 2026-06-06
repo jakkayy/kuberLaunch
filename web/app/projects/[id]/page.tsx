@@ -7,6 +7,8 @@ import RegisterArgoCD from './RegisterArgoCD'
 import DeployButton from './DeployButton'
 import DeploymentHistory from './DeploymentHistory'
 import SetupMonitoring from './SetupMonitoring'
+import SecretsPanel from './SecretsPanel'
+import OneClickSetup from './OneClickSetup'
 
 const RUNTIME_LABEL: Record<string, string> = {
   go: 'Go', nextjs: 'Next.js', nestjs: 'NestJS', fastapi: 'FastAPI',
@@ -78,6 +80,12 @@ export default async function ProjectPage({
         </div>
       </div>
 
+      {/* Golden Path one-click setup */}
+      <OneClickSetup
+        projectId={id}
+        isFullySetup={!!(project.repo_url && project.argocd_app && project.grafana_url)}
+      />
+
       {/* Status banners */}
       {project.repo_url && (
         <div className="flex items-center gap-2 mb-2 px-4 py-3 bg-green-50 border border-green-200 rounded-lg">
@@ -122,6 +130,9 @@ export default async function ProjectPage({
         </div>
         <DeploymentHistory deployments={deployments} />
       </div>
+
+      {/* Secrets */}
+      <SecretsPanel projectId={id} />
 
       {/* Generated files */}
       {files.length > 0 ? (
