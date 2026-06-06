@@ -93,6 +93,26 @@ func (s *ProjectService) Preview(ctx context.Context, id string) ([]generator.Ge
 	return generator.Generate(p)
 }
 
+// RepairGitHub re-pushes all generated files to the existing GitHub repo.
+// Use this to fix incorrectly encoded files.
+func (s *ProjectService) RepairGitHub(ctx context.Context, id string) error {
+	p, err := s.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if p.RepoURL == "" {
+		return fmt.Errorf("project has no GitHub repo")
+	}
+	if s.github == nil {
+		return fmt.Errorf("GitHub integration not configured")
+	}
+	files, err := generator.Generate(p)
+	if err != nil {
+		return fmt.Errorf("generate files: %w", err)
+	}
+	return s.github.PushFiles(ctx, p.Slug, files)
+}
+
 func (s *ProjectService) RegisterArgoCD(ctx context.Context, id string) (string, error) {
 	p, err := s.GetByID(ctx, id)
 	if err != nil {

@@ -2,7 +2,6 @@ package github
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 
 	gh "github.com/google/go-github/v66/github"
@@ -58,10 +57,9 @@ func (c *Client) pushFiles(ctx context.Context, repo string, files []generator.G
 	// Create blobs for each file
 	var treeEntries []*gh.TreeEntry
 	for _, f := range files {
-		content := base64.StdEncoding.EncodeToString([]byte(f.Content))
 		blob, _, err := c.gh.Git.CreateBlob(ctx, c.owner, repo, &gh.Blob{
-			Content:  gh.String(content),
-			Encoding: gh.String("base64"),
+			Content:  gh.String(f.Content),
+			Encoding: gh.String("utf-8"),
 		})
 		if err != nil {
 			return fmt.Errorf("create blob %s: %w", f.Path, err)
@@ -102,8 +100,69 @@ func (c *Client) pushFiles(ctx context.Context, repo string, files []generator.G
 	return err
 }
 
+// PushFiles pushes all generated files to an existing repo as a new commit.
+func (c *Client) PushFiles(ctx context.Context, slug string, files []generator.GeneratedFile) error {
+	return c.pushFiles(ctx, slug, files)
+}
+
 // RepoExists returns true if the repo already exists under the owner.
 func (c *Client) RepoExists(ctx context.Context, slug string) bool {
 	_, resp, _ := c.gh.Repositories.Get(ctx, c.owner, slug)
 	return resp != nil && resp.StatusCode == 200
+}
+
+// TriggerWorkflow dispatches a workflow_dispatch event for the CI workflow.
+// Returns the run ID of the triggered workflow run.
+func (c *Client) TriggerWorkflow(ctx context.Context, slug, branch string) error {
+	_, err := c.gh.Actions.CreateWorkflowDispatchEventByFileName(
+		ctx, c.owner, slug, "ci.yml",
+		gh.CreateWorkflowDispatchEventRequest{Ref: branch},
+	)
+	return err
+}
+
+// GetLatestWorkflowRun returns the most recent run ID and conclusion for the CI workflow.
+// conclusion is empty if the run is still in progress.
+func (c *Client) GetLatestWorkflowRun(ctx context.Context, slug string) (runID int64, status, conclusion string, err error) {
+	runs, _, err := c.gh.Actions.ListWorkflowRunsByFileName(
+		ctx, c.owner, slug, "ci.yml",
+		&gh.ListWorkflowRunsOptions{ListOptions: gh.ListOptions{PerPage: 1}},
+	)
+	if err != nil {
+		return 0, "", "", err
+	}
+	if runs.GetTotalCount() == 0 {
+		return 0, "", "", nil
+	}
+	r := runs.WorkflowRuns[0]
+	return r.GetID(), r.GetStatus(), r.GetConclusion(), nil
+}
+
+// GetFileContent returns the decoded content of a file in the repo.
+func (c *Client) GetFileContent(ctx context.Context, slug, path string) (string, error) {
+	file, _, _, err := c.gh.Repositories.GetContents(ctx, c.owner, slug, path, nil)
+	if err != nil {
+		return "", fmt.Errorf("get file content: %w", err)
+	}
+	content, err := file.GetContent()
+	if err != nil {
+		return "", fmt.Errorf("decode file content: %w", err)
+	}
+	return content, nil
+}
+
+// UpdateFile updates a single file in the repo via the Contents API.
+func (c *Client) UpdateFile(ctx context.Context, slug, path, content, message string) error {
+	// Get current file SHA (needed for updates)
+	file, _, _, err := c.gh.Repositories.GetContents(ctx, c.owner, slug, path, nil)
+	if err != nil {
+		return fmt.Errorf("get file sha: %w", err)
+	}
+
+	_, _, err = c.gh.Repositories.UpdateFile(ctx, c.owner, slug, path, &gh.RepositoryContentFileOptions{
+		Message: gh.String(message),
+		Content: []byte(content),
+		SHA:     file.SHA,
+	})
+	return err
 }

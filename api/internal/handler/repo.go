@@ -31,3 +31,12 @@ func (h *RepoHandler) Connect(c *gin.Context) {
 		"message": "GitHub repo created and files pushed successfully",
 	})
 }
+
+func (h *RepoHandler) Repair(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.svc.RepairGitHub(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Files re-pushed successfully"})
+}
