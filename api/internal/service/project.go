@@ -23,6 +23,13 @@ func NewProjectService(repo *repository.ProjectRepository, github *gh.Client, ar
 	return &ProjectService{repo: repo, github: github, argocd: argocd, grafana: grafana}
 }
 
+func (s *ProjectService) githubOwner() string {
+	if s.github != nil {
+		return s.github.Owner()
+	}
+	return ""
+}
+
 func (s *ProjectService) Create(ctx context.Context, req model.CreateProjectRequest) (*model.Project, []generator.GeneratedFile, error) {
 	slug := repository.ToSlug(req.Name)
 
@@ -47,7 +54,7 @@ func (s *ProjectService) Create(ctx context.Context, req model.CreateProjectRequ
 		return nil, nil, fmt.Errorf("create project: %w", err)
 	}
 
-	files, err := generator.Generate(p)
+	files, err := generator.Generate(p, s.githubOwner())
 	if err != nil {
 		_ = s.repo.UpdateStatus(ctx, p.ID, model.ProjectStatusFailed)
 		return p, nil, fmt.Errorf("generate templates: %w", err)
@@ -84,6 +91,19 @@ func (s *ProjectService) Delete(ctx context.Context, id string) error {
 	if p == nil {
 		return fmt.Errorf("project not found")
 	}
+
+	if s.argocd != nil && p.ArgocdApp != "" {
+		if err := s.argocd.DeleteApp(ctx, p.ArgocdApp); err != nil {
+			return fmt.Errorf("delete ArgoCD app: %w", err)
+		}
+	}
+
+	if s.github != nil && p.RepoURL != "" {
+		if err := s.github.DeleteRepo(ctx, p.Slug); err != nil {
+			return fmt.Errorf("delete GitHub repo: %w", err)
+		}
+	}
+
 	return s.repo.Delete(ctx, id)
 }
 
@@ -92,7 +112,7 @@ func (s *ProjectService) Preview(ctx context.Context, id string) ([]generator.Ge
 	if err != nil {
 		return nil, err
 	}
-	return generator.Generate(p)
+	return generator.Generate(p, s.githubOwner())
 }
 
 func (s *ProjectService) SetupMonitoring(ctx context.Context, id string) (string, error) {
@@ -137,7 +157,7 @@ func (s *ProjectService) RepairGitHub(ctx context.Context, id string) error {
 	if s.github == nil {
 		return fmt.Errorf("GitHub integration not configured")
 	}
-	files, err := generator.Generate(p)
+	files, err := generator.Generate(p, s.githubOwner())
 	if err != nil {
 		return fmt.Errorf("generate files: %w", err)
 	}
@@ -188,7 +208,7 @@ func (s *ProjectService) ConnectGitHub(ctx context.Context, id string) (string, 
 		return "", fmt.Errorf("GitHub integration not configured (GITHUB_TOKEN missing)")
 	}
 
-	files, err := generator.Generate(p)
+	files, err := generator.Generate(p, s.githubOwner())
 	if err != nil {
 		return "", fmt.Errorf("generate files: %w", err)
 	}

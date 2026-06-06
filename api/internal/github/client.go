@@ -165,6 +165,12 @@ func (c *Client) GetFileContent(ctx context.Context, slug, path string) (string,
 	return content, nil
 }
 
+// DeleteRepo deletes a GitHub repository.
+func (c *Client) DeleteRepo(ctx context.Context, slug string) error {
+	_, err := c.gh.Repositories.Delete(ctx, c.owner, slug)
+	return err
+}
+
 // UpdateFile updates a single file in the repo via the Contents API.
 func (c *Client) UpdateFile(ctx context.Context, slug, path, content, message string) error {
 	// Get current file SHA (needed for updates)

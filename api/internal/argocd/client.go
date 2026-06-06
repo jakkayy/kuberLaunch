@@ -122,6 +122,34 @@ func (c *Client) RegisterApp(ctx context.Context, slug, repoURL string) (string,
 	return slug, nil
 }
 
+// DeleteApp removes an ArgoCD Application (cascade deletes all resources).
+func (c *Client) DeleteApp(ctx context.Context, appName string) error {
+	token, err := c.login(ctx)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete,
+		c.baseURL+"/api/v1/applications/"+appName+"?cascade=true", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Host = "argocd.localhost"
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("argocd delete app: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("argocd delete app %d: %s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
 // AppStatus holds the health and sync state of an ArgoCD application.
 type AppStatus struct {
 	Health string // Healthy | Progressing | Degraded | Suspended | Missing | Unknown
