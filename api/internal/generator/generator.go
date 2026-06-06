@@ -21,6 +21,7 @@ type TemplateData struct {
 	Database string
 	Cache    string
 	Port     int
+	Owner    string
 	Image    string
 }
 
@@ -29,7 +30,10 @@ type GeneratedFile struct {
 	Content string
 }
 
-func Generate(p *model.Project) ([]GeneratedFile, error) {
+func Generate(p *model.Project, owner string) ([]GeneratedFile, error) {
+	if owner == "" {
+		owner = "org"
+	}
 	data := TemplateData{
 		Name:     p.Name,
 		Slug:     p.Slug,
@@ -37,7 +41,8 @@ func Generate(p *model.Project) ([]GeneratedFile, error) {
 		Database: string(p.Database),
 		Cache:    string(p.Cache),
 		Port:     runtimePort(p.Runtime),
-		Image:    fmt.Sprintf("ghcr.io/org/%s:latest", p.Slug),
+		Owner:    owner,
+		Image:    fmt.Sprintf("ghcr.io/%s/%s:latest", owner, p.Slug),
 	}
 
 	templateSets := commonTemplates()

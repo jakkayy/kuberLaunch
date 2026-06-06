@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/org/{{ .Slug }}
+    repoURL: https://github.com/{{ .Owner }}/{{ .Slug }}
     targetRevision: HEAD
     path: helm
     helm:

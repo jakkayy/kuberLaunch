@@ -1,8 +1,8 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/org/{{ .Slug }}
-  pullPolicy: IfNotPresent
+  repository: ghcr.io/{{ .Owner }}/{{ .Slug }}
+  pullPolicy: Always
   tag: "latest"
 
 service:
