@@ -87,6 +87,7 @@ func commonTemplates() []templateSpec {
 		{"templates/common/helm/templates/ingress.yaml.tmpl", "helm/templates/ingress.yaml"},
 		{"templates/common/argocd/application.yaml.tmpl", "argocd/application.yaml"},
 		{"templates/common/github/ci.yml.tmpl", ".github/workflows/ci.yml"},
+		{"templates/common/monitoring/servicemonitor.yaml.tmpl", "monitoring/servicemonitor.yaml"},
 	}
 }
 
