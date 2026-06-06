@@ -12,6 +12,13 @@ type Config struct {
 	Env    string
 	DB     DBConfig
 	GitHub GitHubConfig
+	ArgoCD ArgoCDConfig
+}
+
+type ArgoCDConfig struct {
+	URL      string
+	Username string
+	Password string
 }
 
 type GitHubConfig struct {
@@ -48,6 +55,11 @@ func Load() *Config {
 		GitHub: GitHubConfig{
 			Token: getEnv("GITHUB_TOKEN", ""),
 			Owner: getEnv("GITHUB_OWNER", ""),
+		},
+		ArgoCD: ArgoCDConfig{
+			URL:      getEnv("ARGOCD_URL", "http://argocd.localhost:8090"),
+			Username: getEnv("ARGOCD_USERNAME", "admin"),
+			Password: getEnv("ARGOCD_PASSWORD", ""),
 		},
 	}
 }

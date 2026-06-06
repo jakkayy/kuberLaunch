@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jakkayy/kuberlauncher/api/config"
+	"github.com/jakkayy/kuberlauncher/api/internal/argocd"
 	"github.com/jakkayy/kuberlauncher/api/internal/db"
 	"github.com/jakkayy/kuberlauncher/api/internal/handler"
 	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
@@ -38,10 +39,17 @@ func main() {
 		log.Printf("GitHub integration enabled (owner: %s)", cfg.GitHub.Owner)
 	}
 
+	var argocdClient *argocd.Client
+	if cfg.ArgoCD.Password != "" {
+		argocdClient = argocd.New(cfg.ArgoCD.URL, cfg.ArgoCD.Username, cfg.ArgoCD.Password)
+		log.Printf("ArgoCD integration enabled (%s)", cfg.ArgoCD.URL)
+	}
+
 	projectRepo := repository.NewProjectRepository(database)
-	projectSvc := service.NewProjectService(projectRepo, githubClient)
+	projectSvc := service.NewProjectService(projectRepo, githubClient, argocdClient)
 	projectHandler := handler.NewProjectHandler(projectSvc)
 	repoHandler := handler.NewRepoHandler(projectSvc)
+	argocdHandler := handler.NewArgoCDHandler(projectSvc)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -62,6 +70,7 @@ func main() {
 		projects.GET("/:id/download", projectHandler.Download)
 		projects.GET("/:id/preview", projectHandler.Preview)
 		projects.POST("/:id/repo", repoHandler.Connect)
+		projects.POST("/:id/argocd", argocdHandler.Register)
 	}
 
 	srv := &http.Server{

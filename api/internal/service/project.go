@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jakkayy/kuberlauncher/api/internal/argocd"
 	"github.com/jakkayy/kuberlauncher/api/internal/generator"
 	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
@@ -13,10 +14,11 @@ import (
 type ProjectService struct {
 	repo   *repository.ProjectRepository
 	github *gh.Client
+	argocd *argocd.Client
 }
 
-func NewProjectService(repo *repository.ProjectRepository, github *gh.Client) *ProjectService {
-	return &ProjectService{repo: repo, github: github}
+func NewProjectService(repo *repository.ProjectRepository, github *gh.Client, argocd *argocd.Client) *ProjectService {
+	return &ProjectService{repo: repo, github: github, argocd: argocd}
 }
 
 func (s *ProjectService) Create(ctx context.Context, req model.CreateProjectRequest) (*model.Project, []generator.GeneratedFile, error) {
@@ -91,6 +93,36 @@ func (s *ProjectService) Preview(ctx context.Context, id string) ([]generator.Ge
 	return generator.Generate(p)
 }
 
+func (s *ProjectService) RegisterArgoCD(ctx context.Context, id string) (string, error) {
+	p, err := s.GetByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+
+	if p.RepoURL == "" {
+		return "", fmt.Errorf("project has no GitHub repo — connect to GitHub first")
+	}
+
+	if p.ArgocdApp != "" {
+		return p.ArgocdApp, nil
+	}
+
+	if s.argocd == nil {
+		return "", fmt.Errorf("ArgoCD integration not configured (ARGOCD_PASSWORD missing)")
+	}
+
+	appName, err := s.argocd.RegisterApp(ctx, p.Slug, p.RepoURL)
+	if err != nil {
+		return "", fmt.Errorf("register ArgoCD app: %w", err)
+	}
+
+	if err := s.repo.SetArgoCDApp(ctx, id, appName); err != nil {
+		return appName, err
+	}
+
+	return appName, nil
+}
+
 func (s *ProjectService) ConnectGitHub(ctx context.Context, id string) (string, error) {
 	p, err := s.GetByID(ctx, id)
 	if err != nil {
@@ -119,7 +151,7 @@ func (s *ProjectService) ConnectGitHub(ctx context.Context, id string) (string, 
 		return "", fmt.Errorf("create GitHub repo: %w", err)
 	}
 
-	if err := s.repo.SetRepo(ctx, id, repoURL, p.Slug); err != nil {
+	if err := s.repo.SetRepoURL(ctx, id, repoURL); err != nil {
 		return repoURL, err
 	}
 

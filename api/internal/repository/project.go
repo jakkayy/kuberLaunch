@@ -64,10 +64,17 @@ func (r *ProjectRepository) FindAll(ctx context.Context) ([]model.Project, error
 	return projects, rows.Err()
 }
 
-func (r *ProjectRepository) SetRepo(ctx context.Context, id, repoURL, argocdApp string) error {
+func (r *ProjectRepository) SetRepoURL(ctx context.Context, id, repoURL string) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE projects SET repo_url = $1, argocd_app = $2, updated_at = NOW() WHERE id = $3`,
-		repoURL, argocdApp, id)
+		`UPDATE projects SET repo_url = $1, updated_at = NOW() WHERE id = $2`,
+		repoURL, id)
+	return err
+}
+
+func (r *ProjectRepository) SetArgoCDApp(ctx context.Context, id, argocdApp string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE projects SET argocd_app = $1, updated_at = NOW() WHERE id = $2`,
+		argocdApp, id)
 	return err
 }
 
