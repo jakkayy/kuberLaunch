@@ -12,10 +12,10 @@ type SetupStep struct {
 }
 
 type SetupProgress struct {
-	Step    string
-	Status  string
-	Message string
-	Done    bool
+	Step    string `json:"step"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Done    bool   `json:"done"`
 }
 
 // OneClickSetup runs ConnectGitHub → RegisterArgoCD → SetupMonitoring in sequence.
