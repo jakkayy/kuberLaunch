@@ -9,6 +9,8 @@ import DeploymentHistory from './DeploymentHistory'
 import SetupMonitoring from './SetupMonitoring'
 import SecretsPanel from './SecretsPanel'
 import OneClickSetup from './OneClickSetup'
+import ArgoCDStatus from './ArgoCDStatus'
+import PodLogs from './PodLogs'
 
 const RUNTIME_LABEL: Record<string, string> = {
   go: 'Go', nextjs: 'Next.js', nestjs: 'NestJS', fastapi: 'FastAPI',
@@ -102,21 +104,7 @@ export default async function ProjectPage({
         </div>
       )}
 
-      {project.argocd_app && (
-        <div className="flex items-center gap-2 mb-5 px-4 py-3 bg-purple-50 border border-purple-200 rounded-lg">
-          <span className="text-purple-600 text-sm">●</span>
-          <span className="text-sm text-zinc-600">ArgoCD:</span>
-          <a
-            href="http://argocd.localhost:8090"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-mono text-purple-700 hover:underline"
-          >
-            {project.argocd_app}
-          </a>
-          <span className="text-xs text-zinc-400 ml-1">— GitOps sync enabled</span>
-        </div>
-      )}
+      <ArgoCDStatus projectId={id} argocdApp={project.argocd_app ?? ''} />
 
       {/* Deploy section */}
       <div className="mb-6 border border-zinc-200 rounded-lg p-4">
@@ -130,6 +118,9 @@ export default async function ProjectPage({
         </div>
         <DeploymentHistory deployments={deployments} />
       </div>
+
+      {/* Pod Logs */}
+      <PodLogs projectId={id} />
 
       {/* Secrets */}
       <SecretsPanel projectId={id} />
