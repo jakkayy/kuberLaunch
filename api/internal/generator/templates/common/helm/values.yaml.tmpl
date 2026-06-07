@@ -4,6 +4,7 @@ image:
   repository: ghcr.io/{{ .Owner }}/{{ .Slug }}
   pullPolicy: Always
   tag: "latest"
+  pullSecret: "ghcr-secret"
 
 service:
   type: ClusterIP
