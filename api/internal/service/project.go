@@ -194,6 +194,38 @@ func (s *ProjectService) RegisterArgoCD(ctx context.Context, id string) (string,
 	return appName, nil
 }
 
+func (s *ProjectService) GetArgoCDStatus(ctx context.Context, id string) (map[string]string, error) {
+	p, err := s.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if p.ArgocdApp == "" {
+		return map[string]string{"health": "", "sync": ""}, nil
+	}
+	if s.argocd == nil {
+		return nil, fmt.Errorf("ArgoCD integration not configured")
+	}
+	status, err := s.argocd.GetAppStatus(ctx, p.ArgocdApp)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{"health": status.Health, "sync": status.Sync}, nil
+}
+
+func (s *ProjectService) RollbackArgoCD(ctx context.Context, id string) error {
+	p, err := s.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if p.ArgocdApp == "" {
+		return fmt.Errorf("project has no ArgoCD app")
+	}
+	if s.argocd == nil {
+		return fmt.Errorf("ArgoCD integration not configured")
+	}
+	return s.argocd.RollbackApp(ctx, p.ArgocdApp)
+}
+
 func (s *ProjectService) ConnectGitHub(ctx context.Context, id string) (string, error) {
 	p, err := s.GetByID(ctx, id)
 	if err != nil {

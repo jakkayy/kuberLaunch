@@ -71,6 +71,7 @@ func main() {
 	setupHandler := handler.NewSetupHandler(projectSvc)
 	deploymentHandler := handler.NewDeploymentHandler(deploymentSvc, projectSvc)
 	secretHandler := handler.NewSecretHandler(secretSvc)
+	logsHandler := handler.NewLogsHandler(projectSvc)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -93,6 +94,8 @@ func main() {
 		projects.POST("/:id/repo", repoHandler.Connect)
 		projects.POST("/:id/repo/repair", repoHandler.Repair)
 		projects.POST("/:id/argocd", argocdHandler.Register)
+		projects.GET("/:id/argocd/status", argocdHandler.Status)
+		projects.POST("/:id/argocd/rollback", argocdHandler.Rollback)
 		projects.POST("/:id/monitoring", monitoringHandler.Setup)
 		projects.GET("/:id/setup/stream", setupHandler.Stream)
 		projects.POST("/:id/deployments", deploymentHandler.Trigger)
@@ -102,6 +105,7 @@ func main() {
 		projects.POST("/:id/secrets", secretHandler.Set)
 		projects.GET("/:id/secrets", secretHandler.ListKeys)
 		projects.DELETE("/:id/secrets/:key", secretHandler.Delete)
+		projects.GET("/:id/logs", logsHandler.Stream)
 	}
 
 	srv := &http.Server{

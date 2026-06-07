@@ -31,3 +31,26 @@ func (h *ArgoCDHandler) Register(c *gin.Context) {
 		"message":    "ArgoCD application registered successfully",
 	})
 }
+
+// Status returns the current ArgoCD health + sync status.
+// GET /api/v1/projects/:id/argocd/status
+func (h *ArgoCDHandler) Status(c *gin.Context) {
+	id := c.Param("id")
+	status, err := h.svc.GetArgoCDStatus(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, status)
+}
+
+// Rollback triggers an ArgoCD rollback to the previous revision.
+// POST /api/v1/projects/:id/argocd/rollback
+func (h *ArgoCDHandler) Rollback(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.svc.RollbackArgoCD(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}

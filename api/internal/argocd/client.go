@@ -150,6 +150,36 @@ func (c *Client) DeleteApp(ctx context.Context, appName string) error {
 	return nil
 }
 
+// RollbackApp triggers an ArgoCD rollback to the previous deployed revision.
+func (c *Client) RollbackApp(ctx context.Context, appName string) error {
+	token, err := c.login(ctx)
+	if err != nil {
+		return err
+	}
+
+	body, _ := json.Marshal(map[string]any{"id": 0, "dryRun": false, "prune": false})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.baseURL+"/api/v1/applications/"+appName+"/rollback", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Host = "argocd.localhost"
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("argocd rollback: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("argocd rollback %d: %s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
 // AppStatus holds the health and sync state of an ArgoCD application.
 type AppStatus struct {
 	Health string // Healthy | Progressing | Degraded | Suspended | Missing | Unknown
