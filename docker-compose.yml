@@ -3,6 +3,8 @@ services:
     build: ./api
     ports:
       - "8080:8080"
+    env_file:
+      - ./api/.env
     environment:
       PORT: 8080
       ENV: development
@@ -14,8 +16,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./templetes:/app/templetes:ro
+    extra_hosts:
+      - "argocd.localhost:host-gateway"
+      - "grafana.localhost:host-gateway"
+      - "vault.localhost:host-gateway"
 
   postgres:
     image: postgres:16-alpine
