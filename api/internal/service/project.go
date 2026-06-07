@@ -203,11 +203,12 @@ func (s *ProjectService) GetArgoCDStatus(ctx context.Context, id string) (map[st
 		return map[string]string{"health": "", "sync": ""}, nil
 	}
 	if s.argocd == nil {
-		return nil, fmt.Errorf("ArgoCD integration not configured")
+		return map[string]string{"health": "Unknown", "sync": "Unknown"}, nil
 	}
 	status, err := s.argocd.GetAppStatus(ctx, p.ArgocdApp)
 	if err != nil {
-		return nil, err
+		// ArgoCD ไม่ตอบหรือ login fail — คืน Unknown แทน error
+		return map[string]string{"health": "Unknown", "sync": "Unknown"}, nil
 	}
 	return map[string]string{"health": status.Health, "sync": status.Sync}, nil
 }
