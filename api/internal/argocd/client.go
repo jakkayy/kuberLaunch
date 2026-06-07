@@ -150,10 +150,47 @@ func (c *Client) DeleteApp(ctx context.Context, appName string) error {
 	return nil
 }
 
-// RollbackApp triggers an ArgoCD rollback to the previous deployed revision.
+// disableAutoSync patches the app to remove automated sync policy.
+func (c *Client) disableAutoSync(ctx context.Context, appName, token string) error {
+	// Patch spec.syncPolicy to remove automated — required before rollback
+	patch := map[string]any{
+		"spec": map[string]any{
+			"syncPolicy": map[string]any{
+				"syncOptions": []string{"CreateNamespace=true"},
+			},
+		},
+	}
+	body, _ := json.Marshal(patch)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch,
+		c.baseURL+"/api/v1/applications/"+appName+"?patchType=merge", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Host = "argocd.localhost"
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("disable auto-sync: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("disable auto-sync %d: %s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
+// RollbackApp disables auto-sync then triggers a rollback to the previous revision.
 func (c *Client) RollbackApp(ctx context.Context, appName string) error {
 	token, err := c.login(ctx)
 	if err != nil {
+		return err
+	}
+
+	// ArgoCD ไม่ให้ rollback ตอน auto-sync เปิดอยู่ — ปิดก่อน
+	if err := c.disableAutoSync(ctx, appName, token); err != nil {
 		return err
 	}
 

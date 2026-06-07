@@ -31,6 +31,7 @@ export default function ArgoCDStatus({
 }) {
   const [status, setStatus] = useState<Status | null>(null)
   const [rolling, setRolling] = useState(false)
+  const [rolledBack, setRolledBack] = useState(false)
   const [error, setError] = useState('')
 
   const fetchStatus = useCallback(async () => {
@@ -48,16 +49,19 @@ export default function ArgoCDStatus({
   }, [fetchStatus])
 
   async function rollback() {
-    if (!confirm('Rollback ไปยัง revision ก่อนหน้า?')) return
+    if (!confirm('Rollback ไปยัง revision ก่อนหน้า?\n(auto-sync จะถูกปิดชั่วคราว)')) return
     setRolling(true)
     setError('')
     try {
       const res = await fetch(`/api/projects/${projectId}/argocd/rollback`, { method: 'POST' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Rollback failed')
+      setRolledBack(true)
       setTimeout(fetchStatus, 3000)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unknown error')
+      const msg = e instanceof Error ? e.message : 'Unknown error'
+      setError(msg)
+      setTimeout(() => setError(''), 8000)
     } finally {
       setRolling(false)
     }
@@ -93,7 +97,12 @@ export default function ArgoCDStatus({
       )}
 
       <div className="ml-auto flex items-center gap-2">
-        {error && <span className="text-xs text-red-500">{error}</span>}
+        {error && <span className="text-xs text-red-500 max-w-xs truncate" title={error}>{error}</span>}
+        {rolledBack && (
+          <span className="text-xs text-amber-600 font-medium">
+            ↩ Rolled back · auto-sync ปิดอยู่
+          </span>
+        )}
         <button
           onClick={rollback}
           disabled={rolling}
