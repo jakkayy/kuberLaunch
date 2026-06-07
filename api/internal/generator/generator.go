@@ -88,6 +88,7 @@ func commonTemplates() []templateSpec {
 		{"templates/common/helm/Chart.yaml.tmpl", "helm/Chart.yaml"},
 		{"templates/common/helm/values.yaml.tmpl", "helm/values.yaml"},
 		{"templates/common/helm/templates/deployment.yaml.tmpl", "helm/templates/deployment.yaml"},
+		{"templates/common/helm/templates/externalsecret.yaml.tmpl", "helm/templates/externalsecret.yaml"},
 		{"templates/common/helm/templates/service.yaml.tmpl", "helm/templates/service.yaml"},
 		{"templates/common/helm/templates/ingress.yaml.tmpl", "helm/templates/ingress.yaml"},
 		{"templates/common/argocd/application.yaml.tmpl", "argocd/application.yaml"},

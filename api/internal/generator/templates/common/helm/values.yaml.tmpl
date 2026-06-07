@@ -24,8 +24,8 @@ resources:
     memory: 256Mi
 
 env: []
-# - name: DATABASE_URL
-#   valueFrom:
-#     secretKeyRef:
-#       name: {{ .Slug }}-secrets
-#       key: DATABASE_URL
+
+externalSecret:
+  enabled: true
+  storeRef: vault-backend
+  refreshInterval: 1m

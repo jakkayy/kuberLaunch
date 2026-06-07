@@ -25,6 +25,12 @@ spec:
           ports:
             - containerPort: {{ .Port }}
           env: {{ "{{" }}- toYaml .Values.env | nindent 12 {{ "}}" }}
+          {{- "{{" }}- if .Values.externalSecret.enabled {{ "}}" }}
+          envFrom:
+            - secretRef:
+                name: {{ "{{" }} .Release.Name {{ "}}" }}-secrets
+                optional: true
+          {{- "{{" }}- end {{ "}}" }}
           resources: {{ "{{" }}- toYaml .Values.resources | nindent 12 {{ "}}" }}
           readinessProbe:
             tcpSocket:
