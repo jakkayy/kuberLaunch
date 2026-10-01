@@ -72,8 +72,9 @@ func (c *Client) CreateRepo(ctx context.Context, slug string, files []generator.
 	return *repo.HTMLURL, nil
 }
 
-// pushFiles commits all generated files to the repo in a single commit
-// using the Git Tree API. Assumes repo was created with AutoInit=true.
+// pushFiles commits all generated files to main in a single commit using
+// the Git Tree API. Files not in files are kept: the new tree is based on the
+// current one, so user code is never removed.
 func (c *Client) pushFiles(ctx context.Context, repo string, files []generator.GeneratedFile) error {
 	// Get the latest commit SHA on main — empty repo won't have this ref
 	ref, _, err := c.gh.Git.GetRef(ctx, c.owner, repo, "refs/heads/main")
@@ -81,9 +82,25 @@ func (c *Client) pushFiles(ctx context.Context, repo string, files []generator.G
 		// Empty repo: ใช้ Contents API (รองรับ repo ที่ยังไม่มี commit)
 		return c.pushFilesViaContents(ctx, repo, files)
 	}
-	parentSHA := ref.Object.GetSHA()
+	sha, err := c.commitFiles(ctx, repo, ref.Object.GetSHA(), files, "chore: sync project scaffold from kuberLaunch")
+	if err != nil {
+		return err
+	}
+	_, _, err = c.gh.Git.UpdateRef(ctx, c.owner, repo, &gh.Reference{
+		Ref:    gh.String("refs/heads/main"),
+		Object: &gh.GitObject{SHA: gh.String(sha)},
+	}, false)
+	return err
+}
 
-	// Create blobs for each file
+// commitFiles creates a commit on top of parentSHA that adds or replaces
+// files, keeping everything else in the parent tree. Returns the commit SHA.
+func (c *Client) commitFiles(ctx context.Context, repo, parentSHA string, files []generator.GeneratedFile, message string) (string, error) {
+	parent, _, err := c.gh.Git.GetCommit(ctx, c.owner, repo, parentSHA)
+	if err != nil {
+		return "", fmt.Errorf("get parent commit: %w", err)
+	}
+
 	var treeEntries []*gh.TreeEntry
 	for _, f := range files {
 		blob, _, err := c.gh.Git.CreateBlob(ctx, c.owner, repo, &gh.Blob{
@@ -91,38 +108,30 @@ func (c *Client) pushFiles(ctx context.Context, repo string, files []generator.G
 			Encoding: gh.String("utf-8"),
 		})
 		if err != nil {
-			return fmt.Errorf("create blob %s: %w", f.Path, err)
+			return "", fmt.Errorf("create blob %s: %w", f.Path, err)
 		}
-		mode := "100644"
-		typ := "blob"
 		treeEntries = append(treeEntries, &gh.TreeEntry{
 			Path: gh.String(f.Path),
-			Mode: &mode,
-			Type: &typ,
+			Mode: gh.String("100644"),
+			Type: gh.String("blob"),
 			SHA:  blob.SHA,
 		})
 	}
 
-	tree, _, err := c.gh.Git.CreateTree(ctx, c.owner, repo, "", treeEntries)
+	tree, _, err := c.gh.Git.CreateTree(ctx, c.owner, repo, parent.GetTree().GetSHA(), treeEntries)
 	if err != nil {
-		return fmt.Errorf("create tree: %w", err)
+		return "", fmt.Errorf("create tree: %w", err)
 	}
 
 	commit, _, err := c.gh.Git.CreateCommit(ctx, c.owner, repo, &gh.Commit{
-		Message: gh.String("chore: initial project scaffold by kuberLaunch"),
+		Message: gh.String(message),
 		Tree:    tree,
 		Parents: []*gh.Commit{{SHA: gh.String(parentSHA)}},
 	}, &gh.CreateCommitOptions{})
 	if err != nil {
-		return fmt.Errorf("create commit: %w", err)
+		return "", fmt.Errorf("create commit: %w", err)
 	}
-
-	force := true
-	_, _, err = c.gh.Git.UpdateRef(ctx, c.owner, repo, &gh.Reference{
-		Ref:    gh.String("refs/heads/main"),
-		Object: &gh.GitObject{SHA: commit.SHA},
-	}, force)
-	return err
+	return commit.GetSHA(), nil
 }
 
 // pushFilesViaContents pushes files one-by-one using the Contents API.
