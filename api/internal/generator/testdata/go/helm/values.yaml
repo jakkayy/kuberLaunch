@@ -23,6 +23,24 @@ resources:
     cpu: 500m
     memory: 256Mi
 
+# When enabled, the HPA owns the replica count and replicaCount is ignored.
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilization: 70
+
+# Applied whenever more than one replica runs.
+podDisruptionBudget:
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  allowNamespaces:
+    - ingress-nginx
+    - monitoring
+    - cnpg-system
+
 env: []
 
 # Secrets are read from Vault path secret/kuberlauncher/demo-service by External

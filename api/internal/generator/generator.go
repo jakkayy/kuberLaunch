@@ -23,7 +23,8 @@ var templateFS embed.FS
 //	3: dev/staging/prod environments, ServiceMonitor inside the Helm chart
 //	4: CI no longer needs cluster credentials (platform manages pull secrets)
 //	5: provisioned Postgres (CloudNativePG) and Redis, DATABASE_URL/REDIS_URL injected
-const TemplateVersion = 5
+//	6: HPA (prod), PodDisruptionBudget, NetworkPolicy, liveness probe, security context
+const TemplateVersion = 6
 
 // Settings are platform-wide values rendered into every project.
 type Settings struct {
@@ -189,6 +190,9 @@ func commonTemplates() []templateSpec {
 		{"templates/common/helm/templates/servicemonitor.yaml.tmpl", "helm/templates/servicemonitor.yaml", false},
 		{"templates/common/helm/templates/postgres.yaml", "helm/templates/postgres.yaml", true},
 		{"templates/common/helm/templates/redis.yaml", "helm/templates/redis.yaml", true},
+		{"templates/common/helm/templates/hpa.yaml", "helm/templates/hpa.yaml", true},
+		{"templates/common/helm/templates/pdb.yaml", "helm/templates/pdb.yaml", true},
+		{"templates/common/helm/templates/networkpolicy.yaml", "helm/templates/networkpolicy.yaml", true},
 		{"templates/common/argocd/appproject.yaml.tmpl", "argocd/appproject.yaml", false},
 		{"templates/common/github/ci.yml.tmpl", ".github/workflows/ci.yml", false},
 	}

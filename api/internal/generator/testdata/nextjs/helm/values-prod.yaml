@@ -2,6 +2,11 @@
 # image.tag changes only through a kuberLaunch promotion.
 replicaCount: 2
 
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+
 image:
   tag: "latest"
 

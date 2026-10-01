@@ -5,7 +5,9 @@ metadata:
   labels:
     app: {{ "{{" }} .Release.Name {{ "}}" }}
 spec:
+  {{ "{{" }}- if not .Values.autoscaling.enabled {{ "}}" }}
   replicas: {{ "{{" }} .Values.replicaCount {{ "}}" }}
+  {{ "{{" }}- end {{ "}}" }}
   selector:
     matchLabels:
       app: {{ "{{" }} .Release.Name {{ "}}" }}
@@ -18,6 +20,9 @@ spec:
       imagePullSecrets:
         - name: {{ "{{" }} .Values.image.pullSecret {{ "}}" }}
       {{- "{{" }}- end {{ "}}" }}
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: {{ "{{" }} .Release.Name {{ "}}" }}
           image: "{{ "{{" }} .Values.image.repository {{ "}}" }}:{{ "{{" }} .Values.image.tag | default "latest" {{ "}}" }}"
@@ -46,8 +51,19 @@ spec:
                 optional: true
           {{- "{{" }}- end {{ "}}" }}
           resources: {{ "{{" }}- toYaml .Values.resources | nindent 12 {{ "}}" }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           readinessProbe:
             tcpSocket:
               port: {{ .Port }}
             initialDelaySeconds: 5
             periodSeconds: 10
+          # Restart a container that stops accepting connections.
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Port }}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
