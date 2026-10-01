@@ -21,6 +21,7 @@ import (
 	"github.com/jakkayy/kuberlauncher/api/internal/handler"
 	"github.com/jakkayy/kuberlauncher/api/internal/kube"
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
+	"github.com/jakkayy/kuberlauncher/api/internal/observe"
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
 	"github.com/jakkayy/kuberlauncher/api/internal/service"
 	"github.com/jakkayy/kuberlauncher/api/internal/vault"
@@ -28,6 +29,7 @@ import (
 
 func main() {
 	cfg := config.Load()
+	observe.SetupLogging(cfg.Env)
 
 	database, err := db.Connect(cfg.DB.DSN())
 	if err != nil {
@@ -132,7 +134,15 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Recovery(), observe.RequestID(), observe.AccessLog(func(c *gin.Context) string {
+		if u := auth.UserFrom(c); u != nil {
+			return u.Login
+		}
+		return ""
+	}))
+	observe.Register(r, database)
+	// Deprecated alias of /healthz.
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})

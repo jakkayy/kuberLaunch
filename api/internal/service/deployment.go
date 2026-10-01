@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/jakkayy/kuberlauncher/api/internal/argocd"
 	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
+	"github.com/jakkayy/kuberlauncher/api/internal/observe"
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
 )
 
@@ -245,7 +247,13 @@ func (s *DeploymentService) applyAppStatus(ctx context.Context, d *model.Deploym
 }
 
 func (s *DeploymentService) setStatus(ctx context.Context, d *model.Deployment, status model.DeploymentStatus) model.DeploymentStatus {
-	_ = s.deployRepo.UpdateStatus(ctx, d.ID, status)
+	if err := s.deployRepo.UpdateStatus(ctx, d.ID, status); err != nil {
+		slog.ErrorContext(ctx, "update deployment status", "deployment", d.ID, "status", status, "err", err)
+		return d.Status
+	}
+	if status.IsTerminal() && !d.Status.IsTerminal() {
+		observe.DeploymentFinished(string(d.Environment), string(status))
+	}
 	d.Status = status
 	return status
 }

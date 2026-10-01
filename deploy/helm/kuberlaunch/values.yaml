@@ -103,6 +103,10 @@ secrets:
 serviceAccount:
   name: kuberlaunch-api
 
+# Scrape the API's /metrics with the Prometheus Operator.
+monitoring:
+  serviceMonitor: true
+
 # Namespaces created for projects follow <slug>-<env>; the API needs
 # cluster-wide rights to create them and their pull secrets and to read pod logs.
 rbac:
