@@ -1,16 +1,15 @@
 import { NextRequest } from 'next/server'
-
-const API_URL = process.env.API_URL ?? 'http://localhost:8080'
+import { apiFetch } from '@/app/lib/upstream'
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const upstream = await fetch(`${API_URL}/api/v1/projects/${id}/download`)
+  const upstream = await apiFetch(`/api/v1/projects/${id}/download`)
 
   if (!upstream.ok) {
-    return new Response('Not found', { status: 404 })
+    return new Response('Not found', { status: upstream.status === 401 ? 401 : 404 })
   }
 
   return new Response(upstream.body, {

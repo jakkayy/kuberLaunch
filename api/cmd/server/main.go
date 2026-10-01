@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jakkayy/kuberlauncher/api/config"
 	"github.com/jakkayy/kuberlauncher/api/internal/argocd"
+	"github.com/jakkayy/kuberlauncher/api/internal/auth"
 	"github.com/jakkayy/kuberlauncher/api/internal/db"
 	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/grafana"
@@ -66,6 +67,12 @@ func main() {
 		kubeClient = nil
 	}
 
+	userRepo := repository.NewUserRepository(database)
+	authn, err := auth.New(cfg.Auth.JWTSecret, userRepo)
+	if err != nil {
+		log.Fatalf("auth: %v", err)
+	}
+
 	projectRepo := repository.NewProjectRepository(database)
 	deployRepo := repository.NewDeploymentRepository(database)
 	projectSvc := service.NewProjectService(projectRepo, githubClient, argocdClient, grafanaClient)
@@ -89,8 +96,10 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	v1 := r.Group("/api/v1")
+	v1 := r.Group("/api/v1", authn.Middleware())
 	{
+		v1.GET("/me", func(c *gin.Context) { c.JSON(http.StatusOK, auth.UserFrom(c)) })
+
 		projects := v1.Group("/projects")
 		projects.POST("", projectHandler.Create)
 		projects.GET("", projectHandler.List)

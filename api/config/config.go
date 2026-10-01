@@ -10,11 +10,17 @@ import (
 type Config struct {
 	Port    string
 	Env     string
+	Auth    AuthConfig
 	DB      DBConfig
 	GitHub  GitHubConfig
 	ArgoCD  ArgoCDConfig
 	Grafana GrafanaConfig
 	Vault   VaultConfig
+}
+
+type AuthConfig struct {
+	// JWTSecret verifies session tokens signed by the web app (shared secret).
+	JWTSecret string
 }
 
 type ArgoCDConfig struct {
@@ -59,6 +65,9 @@ func Load() *Config {
 	return &Config{
 		Port: getEnv("PORT", "8080"),
 		Env:  getEnv("ENV", "development"),
+		Auth: AuthConfig{
+			JWTSecret: getEnv("AUTH_JWT_SECRET", ""),
+		},
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
 			Port:     getEnv("DB_PORT", "5432"),

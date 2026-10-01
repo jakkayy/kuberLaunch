@@ -2,8 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { apiFetch } from './lib/upstream'
 
-const API_URL = process.env.API_URL ?? 'http://localhost:8080'
 
 type ActionState = { error: string } | null
 
@@ -18,14 +18,14 @@ export async function createProject(
     cache: formData.get('cache') as string,
   }
 
-  const res = await fetch(`${API_URL}/api/v1/projects`, {
+  const res = await apiFetch('/api/v1/projects', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
 
   if (!res.ok) {
-    const err = await res.json()
+    const err = await res.json().catch(() => ({}))
     return { error: err.error ?? 'Failed to create project' }
   }
 
