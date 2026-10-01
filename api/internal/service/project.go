@@ -10,6 +10,7 @@ import (
 	"github.com/jakkayy/kuberlauncher/api/internal/grafana"
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
+	"github.com/jakkayy/kuberlauncher/api/internal/validate"
 	"github.com/jakkayy/kuberlauncher/api/internal/vault"
 )
 
@@ -37,13 +38,16 @@ func namespaces(p *model.Project) []string {
 
 func (s *ProjectService) Create(ctx context.Context, req model.CreateProjectRequest) (*model.Project, []generator.GeneratedFile, error) {
 	slug := repository.ToSlug(req.Name)
+	if err := validate.Slug(slug); err != nil {
+		return nil, nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
 
 	exists, err := s.repo.SlugExists(ctx, slug)
 	if err != nil {
 		return nil, nil, err
 	}
 	if exists {
-		return nil, nil, fmt.Errorf("project with name %q already exists", req.Name)
+		return nil, nil, fmt.Errorf("%w: project with slug %q already exists", ErrConflict, slug)
 	}
 
 	p := &model.Project{

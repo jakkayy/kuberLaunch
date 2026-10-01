@@ -29,7 +29,7 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 
 	p, files, err := h.svc.Create(c.Request.Context(), req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	if err := h.access.GrantOwner(c.Request.Context(), p.ID, auth.UserFrom(c)); err != nil {

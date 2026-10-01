@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"strings"
 
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
@@ -104,15 +103,23 @@ func (r *ProjectRepository) SlugExists(ctx context.Context, slug string) (bool, 
 	return exists, err
 }
 
-// toSlug converts a project name to a k8s-safe slug.
+// ToSlug converts a project name to a k8s-safe slug: lowercase, spaces and
+// underscores become hyphens, other characters are dropped and repeated
+// hyphens collapse. The result still needs validate.Slug.
 func ToSlug(name string) string {
-	slug := strings.ToLower(name)
-	slug = strings.ReplaceAll(slug, " ", "-")
 	var b strings.Builder
-	for _, r := range slug {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+	lastHyphen := true // also trims leading hyphens
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
 			b.WriteRune(r)
+			lastHyphen = false
+		case r == '-' || r == ' ' || r == '_':
+			if !lastHyphen {
+				b.WriteByte('-')
+				lastHyphen = true
+			}
 		}
 	}
-	return fmt.Sprintf("%.50s", strings.Trim(b.String(), "-"))
+	return strings.TrimRight(b.String(), "-")
 }
