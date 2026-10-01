@@ -104,11 +104,14 @@ type DBConfig struct {
 	User     string
 	Password string
 	Name     string
+	// SSLMode is a libpq sslmode: disable for local dev, require (or
+	// verify-full) for any network-reachable database.
+	SSLMode string
 }
 
 func (d DBConfig) DSN() string {
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		d.Host, d.Port, d.User, d.Password, d.Name)
+	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		d.Host, d.Port, d.User, d.Password, d.Name, d.SSLMode)
 }
 
 func Load() *Config {
@@ -137,6 +140,7 @@ func Load() *Config {
 			User:     getEnv("DB_USER", "kuberlauncher"),
 			Password: getSecret("DB_PASSWORD", "kuberlauncher"),
 			Name:     getEnv("DB_NAME", "kuberlauncher"),
+			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 		GitHub: GitHubConfig{
 			Owner:          getEnv("GITHUB_OWNER", ""),

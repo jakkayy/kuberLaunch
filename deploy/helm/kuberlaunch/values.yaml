@@ -50,10 +50,30 @@ web:
     GITHUB_OAUTH_CLIENT_ID: ""
     AUTH_ALLOWED_ORG: ""
 
-# Platform database connection. With postgresql.cnpg.enabled the chart
-# creates the cluster (see postgres.yaml) and these are filled in for you.
+# Platform database. With postgresql.cnpg.enabled the chart runs an HA
+# CloudNativePG cluster and connects to it; otherwise set database.* to an
+# external (managed) PostgreSQL and put DB_PASSWORD in the platform secret.
+postgresql:
+  cnpg:
+    enabled: true
+    instances: 3          # 1 primary + 2 streaming replicas, automatic failover
+    storage: 20Gi
+    storageClass: ""
+    resources:
+      requests: { cpu: 250m, memory: 512Mi }
+      limits: { memory: 1Gi }
+    backup:
+      enabled: true
+      # Continuous WAL archiving + daily base backups (point-in-time recovery).
+      destinationPath: s3://kuberlaunch-backups/db
+      endpointURL: ""      # set for S3-compatible stores (MinIO, R2, ...)
+      # Secret with ACCESS_KEY_ID / ACCESS_SECRET_KEY for the bucket.
+      s3CredentialsSecret: kuberlaunch-backup-s3
+      retentionPolicy: 30d
+      schedule: "0 0 3 * * *"   # daily at 03:00 (seconds field first)
+
 database:
-  host: kuberlaunch-db-rw
+  host: ""               # defaults to <release>-db-rw when cnpg is enabled
   port: "5432"
   name: kuberlauncher
   user: kuberlauncher

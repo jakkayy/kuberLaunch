@@ -27,3 +27,10 @@ func TestGetSecretFallsBackToEnv(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestDSNIncludesSSLMode(t *testing.T) {
+	d := DBConfig{Host: "db", Port: "5432", User: "u", Password: "p", Name: "n", SSLMode: "require"}
+	if got, want := d.DSN(), "host=db port=5432 user=u password=p dbname=n sslmode=require"; got != want {
+		t.Fatalf("DSN = %q, want %q", got, want)
+	}
+}

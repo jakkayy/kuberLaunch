@@ -1,0 +1,58 @@
+{{- with .Values.postgresql.cnpg }}
+{{- if .enabled }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $.Release.Name }}-db
+  labels: {{- include "kuberlaunch.labels" $ | nindent 4 }}
+spec:
+  instances: {{ .instances }}
+  # Spread instances across nodes so one node failure keeps a quorum.
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: kubernetes.io/hostname
+  storage:
+    size: {{ .storage }}
+    {{- if .storageClass }}
+    storageClass: {{ .storageClass }}
+    {{- end }}
+  resources: {{- toYaml .resources | nindent 4 }}
+  bootstrap:
+    initdb:
+      database: {{ $.Values.database.name }}
+      owner: {{ $.Values.database.user }}
+  {{- if .backup.enabled }}
+  backup:
+    retentionPolicy: {{ .backup.retentionPolicy | quote }}
+    barmanObjectStore:
+      destinationPath: {{ .backup.destinationPath | quote }}
+      {{- if .backup.endpointURL }}
+      endpointURL: {{ .backup.endpointURL | quote }}
+      {{- end }}
+      s3Credentials:
+        accessKeyId:
+          name: {{ .backup.s3CredentialsSecret }}
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: {{ .backup.s3CredentialsSecret }}
+          key: ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+  {{- end }}
+{{- if .backup.enabled }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ $.Release.Name }}-db-daily
+  labels: {{- include "kuberlaunch.labels" $ | nindent 4 }}
+spec:
+  schedule: {{ .backup.schedule | quote }}
+  backupOwnerReference: self
+  cluster:
+    name: {{ $.Release.Name }}-db
+{{- end }}
+{{- end }}
+{{- end }}
