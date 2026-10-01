@@ -71,11 +71,39 @@ func (c *Client) login(ctx context.Context) (string, error) {
 	return result.Token, nil
 }
 
-// RegisterApp creates (or upserts) an ArgoCD Application for the given project.
-// Returns the application name.
+// EnsureProject creates or updates an AppProject named slug that may only
+// deploy from repoURL into the slug-* namespaces of the local cluster and may
+// create no cluster-scoped resources other than those namespaces.
+func (c *Client) EnsureProject(ctx context.Context, slug, repoURL string) error {
+	project := map[string]any{
+		"metadata": map[string]any{"name": slug, "namespace": "argocd"},
+		"spec": map[string]any{
+			"description": "kuberLaunch project " + slug,
+			"sourceRepos": []string{repoURL},
+			"destinations": []map[string]string{
+				{"server": "https://kubernetes.default.svc", "namespace": slug + "-*"},
+			},
+			"clusterResourceWhitelist": []map[string]string{
+				{"group": "", "kind": "Namespace"},
+			},
+		},
+	}
+	_, err := c.call(ctx, http.MethodPost, "/api/v1/projects",
+		map[string]any{"project": project, "upsert": true}, "create project", http.StatusOK)
+	return err
+}
+
+// DeleteProject removes the AppProject; its applications must be deleted first.
+func (c *Client) DeleteProject(ctx context.Context, slug string) error {
+	_, err := c.call(ctx, http.MethodDelete, "/api/v1/projects/"+slug, nil, "delete project",
+		http.StatusOK, http.StatusNotFound)
+	return err
+}
+
+// RegisterApp creates or updates the ArgoCD Application for a project inside
+// its own AppProject. Returns the application name.
 func (c *Client) RegisterApp(ctx context.Context, slug, repoURL string) (string, error) {
-	token, err := c.token(ctx)
-	if err != nil {
+	if err := c.EnsureProject(ctx, slug, repoURL); err != nil {
 		return "", err
 	}
 
@@ -85,7 +113,7 @@ func (c *Client) RegisterApp(ctx context.Context, slug, repoURL string) (string,
 			"namespace": "argocd",
 		},
 		"spec": map[string]any{
-			"project": "default",
+			"project": slug,
 			"source": map[string]any{
 				"repoURL":        repoURL,
 				"targetRevision": "HEAD",
@@ -108,29 +136,43 @@ func (c *Client) RegisterApp(ctx context.Context, slug, repoURL string) (string,
 		},
 	}
 
-	body, _ := json.Marshal(app)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.baseURL+"/api/v1/applications", bytes.NewReader(body))
-	if err != nil {
+	if _, err := c.call(ctx, http.MethodPost, "/api/v1/applications?upsert=true", app, "create app", http.StatusOK); err != nil {
 		return "", err
+	}
+	return slug, nil
+}
+
+// call sends an authenticated JSON request and returns the body when the
+// response status is one of ok.
+func (c *Client) call(ctx context.Context, method, path string, body any, what string, ok ...int) ([]byte, error) {
+	token, err := c.token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, r)
+	if err != nil {
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("argocd create app: %w", err)
+		return nil, fmt.Errorf("argocd %s: %w", what, err)
 	}
 	defer resp.Body.Close()
-
 	b, _ := io.ReadAll(resp.Body)
-
-	// 200 = created, 409 = already exists (idempotent)
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
-		return "", fmt.Errorf("argocd create app %d: %s", resp.StatusCode, string(b))
+	for _, code := range ok {
+		if resp.StatusCode == code {
+			return b, nil
+		}
 	}
-
-	return slug, nil
+	return nil, fmt.Errorf("argocd %s %d: %s", what, resp.StatusCode, string(b))
 }
 
 // DeleteApp removes an ArgoCD Application (cascade deletes all resources).

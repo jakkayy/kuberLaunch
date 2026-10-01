@@ -101,6 +101,9 @@ func (s *ProjectService) Delete(ctx context.Context, id string) error {
 		if err := s.argocd.DeleteApp(ctx, p.ArgocdApp); err != nil {
 			return fmt.Errorf("delete ArgoCD app: %w", err)
 		}
+		if err := s.argocd.DeleteProject(ctx, p.Slug); err != nil {
+			return fmt.Errorf("delete ArgoCD project: %w", err)
+		}
 	}
 
 	if s.github != nil && p.RepoURL != "" {

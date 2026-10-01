@@ -4,7 +4,7 @@ metadata:
   name: {{ .Slug }}
   namespace: argocd
 spec:
-  project: default
+  project: {{ .Slug }}
   source:
     repoURL: https://github.com/{{ .Owner }}/{{ .Slug }}
     targetRevision: HEAD

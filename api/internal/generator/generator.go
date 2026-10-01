@@ -124,6 +124,7 @@ func commonTemplates() []templateSpec {
 		{"templates/common/helm/templates/secretstore.yaml.tmpl", "helm/templates/secretstore.yaml"},
 		{"templates/common/helm/templates/service.yaml.tmpl", "helm/templates/service.yaml"},
 		{"templates/common/helm/templates/ingress.yaml.tmpl", "helm/templates/ingress.yaml"},
+		{"templates/common/argocd/appproject.yaml.tmpl", "argocd/appproject.yaml"},
 		{"templates/common/argocd/application.yaml.tmpl", "argocd/application.yaml"},
 		{"templates/common/github/ci.yml.tmpl", ".github/workflows/ci.yml"},
 		{"templates/common/monitoring/servicemonitor.yaml.tmpl", "monitoring/servicemonitor.yaml"},

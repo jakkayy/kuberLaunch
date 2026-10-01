@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: demo-service
+  namespace: argocd
+spec:
+  description: kuberLaunch project demo-service
+  sourceRepos:
+    - https://github.com/acme/demo-service
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: demo-service-*
+  # Only the project's namespaces may be created at cluster scope.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace

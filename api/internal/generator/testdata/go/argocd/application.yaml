@@ -4,7 +4,7 @@ metadata:
   name: demo-service
   namespace: argocd
 spec:
-  project: default
+  project: demo-service
   source:
     repoURL: https://github.com/acme/demo-service
     targetRevision: HEAD
