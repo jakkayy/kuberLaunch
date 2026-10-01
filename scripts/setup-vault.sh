@@ -44,7 +44,7 @@ vault write auth/kubernetes/role/kuberlaunch-api \
   token_ttl=1h
 
 # Read-only access to the platform's own secrets for External Secrets
-# (k8s/platform/kuberlaunch-secrets.yaml).
+# (deploy/helm/kuberlaunch, secrets.externalSecret).
 vault policy write kuberlaunch-platform-secrets - <<'POLICY'
 path "secret/data/platform/kuberlaunch" { capabilities = ["read"] }
 POLICY

@@ -82,3 +82,18 @@ jobs:
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm run build
+
+  platform-chart:
+    name: platform Helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+      - uses: azure/setup-helm@v4
+      - run: helm lint deploy/helm/kuberlaunch
+      - run: |
+          helm template kuberlaunch deploy/helm/kuberlaunch \
+            | go run github.com/yannh/kubeconform/cmd/kubeconform@v0.7.0 -strict -ignore-missing-schemas -summary
