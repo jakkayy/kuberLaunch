@@ -24,7 +24,21 @@ spec:
           imagePullPolicy: {{ "{{" }} .Values.image.pullPolicy {{ "}}" }}
           ports:
             - containerPort: {{ .Port }}
-          env: {{ "{{" }}- toYaml .Values.env | nindent 12 {{ "}}" }}
+          env:
+            {{ "{{" }}- if and (eq .Values.database.type "postgres") .Values.database.provision {{ "}}" }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ "{{" }} .Release.Name {{ "}}" }}-db-app
+                  key: uri
+            {{ "{{" }}- end {{ "}}" }}
+            {{ "{{" }}- if and (eq .Values.cache.type "redis") .Values.cache.provision {{ "}}" }}
+            - name: REDIS_URL
+              value: redis://{{ "{{" }} .Release.Name {{ "}}" }}-redis:6379
+            {{ "{{" }}- end {{ "}}" }}
+            {{ "{{" }}- with .Values.env {{ "}}" }}
+            {{ "{{" }}- toYaml . | nindent 12 {{ "}}" }}
+            {{ "{{" }}- end {{ "}}" }}
           {{- "{{" }}- if .Values.externalSecret.enabled {{ "}}" }}
           envFrom:
             - secretRef:

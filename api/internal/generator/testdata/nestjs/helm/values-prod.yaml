@@ -7,3 +7,7 @@ image:
 
 ingress:
   host: demo-service.local
+
+database:
+  instances: 3
+  storage: 10Gi

@@ -41,3 +41,29 @@ monitoring:
   # Requires the Prometheus Operator CRDs (kube-prometheus-stack).
   serviceMonitor: true
   path: /metrics
+
+# Backing services (see docs/adr/002-database-cache-provisioning.md).
+# provision: false means the app connects to an external service; put its
+# DATABASE_URL / REDIS_URL in Vault instead.
+database:
+  type: {{ .Database }}
+  provision: {{ if eq .Database "postgres" }}true{{ else }}false{{ end }}
+  instances: 1
+  storage: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+cache:
+  type: {{ .Cache }}
+  provision: {{ if eq .Cache "redis" }}true{{ else }}false{{ end }}
+  image: redis:7-alpine
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi

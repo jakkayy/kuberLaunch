@@ -22,7 +22,8 @@ var templateFS embed.FS
 //	2: per-project Vault SecretStore, ArgoCD AppProject, CI concurrency
 //	3: dev/staging/prod environments, ServiceMonitor inside the Helm chart
 //	4: CI no longer needs cluster credentials (platform manages pull secrets)
-const TemplateVersion = 4
+//	5: provisioned Postgres (CloudNativePG) and Redis, DATABASE_URL/REDIS_URL injected
+const TemplateVersion = 5
 
 // Settings are platform-wide values rendered into every project.
 type Settings struct {
@@ -115,8 +116,17 @@ func Generate(p *model.Project, settings Settings) ([]GeneratedFile, error) {
 	templateSets = append(templateSets, runtimeSpecific...)
 
 	var files []GeneratedFile
-	render := func(templatePath, outputPath string, d TemplateData) error {
-		content, err := renderTemplate(templatePath, d)
+	render := func(ts templateSpec, outputPath string, d TemplateData) error {
+		templatePath := ts.templatePath
+		var content string
+		var err error
+		if ts.raw {
+			var b []byte
+			b, err = templateFS.ReadFile(templatePath)
+			content = string(b)
+		} else {
+			content, err = renderTemplate(templatePath, d)
+		}
 		if err != nil {
 			return fmt.Errorf("render %s: %w", templatePath, err)
 		}
@@ -124,13 +134,13 @@ func Generate(p *model.Project, settings Settings) ([]GeneratedFile, error) {
 		return nil
 	}
 	for _, ts := range templateSets {
-		if err := render(ts.templatePath, ts.outputPath, data); err != nil {
+		if err := render(ts, ts.outputPath, data); err != nil {
 			return nil, err
 		}
 	}
 	for _, ts := range envTemplates() {
 		for _, env := range model.Environments {
-			if err := render(ts.templatePath, strings.ReplaceAll(ts.outputPath, "{env}", string(env)), data.forEnv(env)); err != nil {
+			if err := render(ts, strings.ReplaceAll(ts.outputPath, "{env}", string(env)), data.forEnv(env)); err != nil {
 				return nil, err
 			}
 		}
@@ -162,20 +172,25 @@ func ToZip(files []GeneratedFile) ([]byte, error) {
 type templateSpec struct {
 	templatePath string
 	outputPath   string
+	// raw files are copied verbatim (pure Helm templates with no generator
+	// variables), avoiding {{ "{{" }} escaping.
+	raw bool
 }
 
 func commonTemplates() []templateSpec {
 	return []templateSpec{
-		{"templates/common/helm/Chart.yaml.tmpl", "helm/Chart.yaml"},
-		{"templates/common/helm/values.yaml.tmpl", "helm/values.yaml"},
-		{"templates/common/helm/templates/deployment.yaml.tmpl", "helm/templates/deployment.yaml"},
-		{"templates/common/helm/templates/externalsecret.yaml.tmpl", "helm/templates/externalsecret.yaml"},
-		{"templates/common/helm/templates/secretstore.yaml.tmpl", "helm/templates/secretstore.yaml"},
-		{"templates/common/helm/templates/service.yaml.tmpl", "helm/templates/service.yaml"},
-		{"templates/common/helm/templates/ingress.yaml.tmpl", "helm/templates/ingress.yaml"},
-		{"templates/common/helm/templates/servicemonitor.yaml.tmpl", "helm/templates/servicemonitor.yaml"},
-		{"templates/common/argocd/appproject.yaml.tmpl", "argocd/appproject.yaml"},
-		{"templates/common/github/ci.yml.tmpl", ".github/workflows/ci.yml"},
+		{"templates/common/helm/Chart.yaml.tmpl", "helm/Chart.yaml", false},
+		{"templates/common/helm/values.yaml.tmpl", "helm/values.yaml", false},
+		{"templates/common/helm/templates/deployment.yaml.tmpl", "helm/templates/deployment.yaml", false},
+		{"templates/common/helm/templates/externalsecret.yaml.tmpl", "helm/templates/externalsecret.yaml", false},
+		{"templates/common/helm/templates/secretstore.yaml.tmpl", "helm/templates/secretstore.yaml", false},
+		{"templates/common/helm/templates/service.yaml.tmpl", "helm/templates/service.yaml", false},
+		{"templates/common/helm/templates/ingress.yaml.tmpl", "helm/templates/ingress.yaml", false},
+		{"templates/common/helm/templates/servicemonitor.yaml.tmpl", "helm/templates/servicemonitor.yaml", false},
+		{"templates/common/helm/templates/postgres.yaml", "helm/templates/postgres.yaml", true},
+		{"templates/common/helm/templates/redis.yaml", "helm/templates/redis.yaml", true},
+		{"templates/common/argocd/appproject.yaml.tmpl", "argocd/appproject.yaml", false},
+		{"templates/common/github/ci.yml.tmpl", ".github/workflows/ci.yml", false},
 	}
 }
 
@@ -183,15 +198,15 @@ func commonTemplates() []templateSpec {
 // is replaced with the environment name.
 func envTemplates() []templateSpec {
 	return []templateSpec{
-		{"templates/common/helm/values-env.yaml.tmpl", "helm/values-{env}.yaml"},
-		{"templates/common/argocd/application.yaml.tmpl", "argocd/application-{env}.yaml"},
+		{"templates/common/helm/values-env.yaml.tmpl", "helm/values-{env}.yaml", false},
+		{"templates/common/argocd/application.yaml.tmpl", "argocd/application-{env}.yaml", false},
 	}
 }
 
 func runtimeTemplates(rt model.Runtime) []templateSpec {
 	return []templateSpec{
-		{fmt.Sprintf("templates/%s/Dockerfile.tmpl", rt), "Dockerfile"},
-		{fmt.Sprintf("templates/%s/.dockerignore.tmpl", rt), ".dockerignore"},
+		{fmt.Sprintf("templates/%s/Dockerfile.tmpl", rt), "Dockerfile", false},
+		{fmt.Sprintf("templates/%s/.dockerignore.tmpl", rt), ".dockerignore", false},
 	}
 }
 

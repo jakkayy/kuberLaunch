@@ -11,3 +11,9 @@ image:
 
 ingress:
   host: {{ .IngressHost }}
+{{- if eq .Database "postgres" }}
+
+database:
+  instances: {{ if eq .Env "prod" }}3{{ else }}1{{ end }}
+  storage: {{ if eq .Env "prod" }}10Gi{{ else }}1Gi{{ end }}
+{{- end }}
