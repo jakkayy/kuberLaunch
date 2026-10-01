@@ -69,3 +69,14 @@ export interface Deployment {
   created_at: string
   updated_at: string
 }
+
+export interface AuditEntry {
+  id: number
+  actor_id?: string
+  actor_login: string
+  action: string
+  project_id?: string
+  status: number
+  details: Record<string, string>
+  created_at: string
+}

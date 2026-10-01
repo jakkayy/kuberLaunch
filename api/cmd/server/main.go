@@ -126,9 +126,12 @@ func main() {
 	maintainer := accessHandler.RequireProjectRole(model.RoleMaintainer)
 	owner := accessHandler.RequireProjectRole(model.RoleOwner)
 
-	v1 := r.Group("/api/v1", authn.Middleware())
+	auditHandler := handler.NewAuditHandler(repository.NewAuditRepository(database))
+
+	v1 := r.Group("/api/v1", authn.Middleware(), auditHandler.Middleware())
 	{
 		v1.GET("/me", accessHandler.Me)
+		v1.GET("/audit", accessHandler.RequireAdmin, auditHandler.ListAll)
 
 		teams := v1.Group("/teams")
 		teams.GET("", accessHandler.ListTeams)
@@ -151,6 +154,7 @@ func main() {
 		projects.GET("/:id/deployments/:dep_id/stream", viewer, deploymentHandler.Stream)
 		projects.GET("/:id/secrets", viewer, secretHandler.ListKeys)
 		projects.GET("/:id/members", viewer, accessHandler.ListMembers)
+		projects.GET("/:id/audit", maintainer, auditHandler.ListForProject)
 
 		// maintainer: day-to-day operations
 		projects.POST("/:id/repo", maintainer, repoHandler.Connect)

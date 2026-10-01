@@ -32,6 +32,7 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 		respondError(c, err)
 		return
 	}
+	setAuditProject(c, p.ID)
 	if err := h.access.GrantOwner(c.Request.Context(), p.ID, auth.UserFrom(c)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "grant owner: " + err.Error()})
 		return

@@ -50,6 +50,15 @@ func projectRole(c *gin.Context) model.Role {
 	return model.RoleNone
 }
 
+// RequireAdmin aborts unless the caller is a platform admin.
+func (h *AccessHandler) RequireAdmin(c *gin.Context) {
+	if !h.svc.IsAdmin(auth.UserFrom(c)) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "platform admin only"})
+		return
+	}
+	c.Next()
+}
+
 func (h *AccessHandler) Me(c *gin.Context) {
 	u := auth.UserFrom(c)
 	c.JSON(http.StatusOK, gin.H{"user": u, "is_admin": h.svc.IsAdmin(u)})
