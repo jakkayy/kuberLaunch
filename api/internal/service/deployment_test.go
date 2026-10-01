@@ -9,6 +9,7 @@ import (
 	"github.com/jakkayy/kuberlauncher/api/internal/argocd"
 	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
+	"github.com/jakkayy/kuberlauncher/api/internal/repository"
 )
 
 type fakeDeployStore struct {
@@ -24,6 +25,11 @@ func newFakeDeployStore(ds ...*model.Deployment) *fakeDeployStore {
 }
 
 func (s *fakeDeployStore) Create(_ context.Context, d *model.Deployment) error {
+	for _, other := range s.byID {
+		if other.ProjectID == d.ProjectID && !other.Status.IsTerminal() {
+			return repository.ErrDeploymentInProgress
+		}
+	}
 	d.ID = "dep-new"
 	d.CreatedAt = time.Now()
 	s.byID[d.ID] = d
@@ -284,6 +290,14 @@ func TestTrigger(t *testing.T) {
 		_, err := newTestService(store, &fakeGitHub{triggerErr: errors.New("boom")}, nil).Trigger(context.Background(), "p1", "main")
 		if err == nil || store.byID["dep-new"].Status != model.DeploymentStatusFailed {
 			t.Fatalf("err %v, status %s", err, store.byID["dep-new"].Status)
+		}
+	})
+	t.Run("rejects concurrent deployment", func(t *testing.T) {
+		github := &fakeGitHub{}
+		store := newFakeDeployStore(deployment(model.DeploymentStatusBuilding))
+		_, err := newTestService(store, github, nil).Trigger(context.Background(), "p1", "main")
+		if !errors.Is(err, ErrConflict) || len(github.triggered) != 0 {
+			t.Fatalf("err = %v, triggered %v", err, github.triggered)
 		}
 	})
 	t.Run("requires GitHub", func(t *testing.T) {

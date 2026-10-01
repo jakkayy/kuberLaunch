@@ -7,6 +7,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Never run two builds of the same ref at once: the tag-bump commit to
+# helm/values.yaml would race. Queued runs wait instead of being cancelled.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/demo-service

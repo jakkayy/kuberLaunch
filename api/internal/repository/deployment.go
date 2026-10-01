@@ -3,6 +3,9 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
 )
@@ -15,13 +18,22 @@ func NewDeploymentRepository(db *sql.DB) *DeploymentRepository {
 	return &DeploymentRepository{db: db}
 }
 
+// ErrDeploymentInProgress is returned by Create when the project already has
+// a non-terminal deployment.
+var ErrDeploymentInProgress = errors.New("a deployment is already in progress for this project")
+
 func (r *DeploymentRepository) Create(ctx context.Context, d *model.Deployment) error {
-	return r.db.QueryRowContext(ctx,
+	err := r.db.QueryRowContext(ctx,
 		`INSERT INTO deployments (project_id, branch, triggered_by, status)
 		 VALUES ($1, $2, $3, $4)
 		 RETURNING id, created_at, updated_at`,
 		d.ProjectID, d.Branch, d.TriggeredBy, d.Status,
 	).Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "uniq_deployments_active_per_project" {
+		return ErrDeploymentInProgress
+	}
+	return err
 }
 
 func (r *DeploymentRepository) FindByID(ctx context.Context, id string) (*model.Deployment, error) {

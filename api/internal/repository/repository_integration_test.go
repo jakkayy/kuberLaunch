@@ -4,6 +4,7 @@ package repository_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
@@ -67,6 +68,10 @@ func TestRepositories(t *testing.T) {
 		active, err := deployments.FindActive(ctx)
 		if err != nil || len(active) != 1 {
 			t.Fatalf("FindActive = %v, %v", active, err)
+		}
+		second := &model.Deployment{ProjectID: p.ID, Branch: "main", TriggeredBy: "user", Status: model.DeploymentStatusPending}
+		if err := deployments.Create(ctx, second); !errors.Is(err, repository.ErrDeploymentInProgress) {
+			t.Fatalf("second active deployment: err = %v, want ErrDeploymentInProgress", err)
 		}
 		if err := deployments.SetWorkflowRunID(ctx, d.ID, 42); err != nil {
 			t.Fatal(err)

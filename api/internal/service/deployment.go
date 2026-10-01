@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -95,6 +96,9 @@ func (s *DeploymentService) Trigger(ctx context.Context, projectID, branch strin
 		Status:      model.DeploymentStatusPending,
 	}
 	if err := s.deployRepo.Create(ctx, d); err != nil {
+		if errors.Is(err, repository.ErrDeploymentInProgress) {
+			return nil, fmt.Errorf("%w: %v", ErrConflict, err)
+		}
 		return nil, fmt.Errorf("create deployment: %w", err)
 	}
 
