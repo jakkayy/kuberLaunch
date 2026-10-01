@@ -108,7 +108,7 @@ func main() {
 	repoHandler := handler.NewRepoHandler(projectSvc)
 	argocdHandler := handler.NewArgoCDHandler(projectSvc)
 	monitoringHandler := handler.NewMonitoringHandler(projectSvc)
-	setupHandler := handler.NewSetupHandler(projectSvc)
+	setupHandler := handler.NewSetupHandler(service.NewSetupService(projectSvc, repository.NewSetupRepository(database)))
 	deploymentHandler := handler.NewDeploymentHandler(deploymentSvc, projectSvc)
 	secretHandler := handler.NewSecretHandler(secretSvc)
 	logsHandler := handler.NewLogsHandler(projectSvc, kubeClient)
@@ -154,6 +154,8 @@ func main() {
 		projects.GET("/:id/deployments/:dep_id/stream", viewer, deploymentHandler.Stream)
 		projects.GET("/:id/secrets", viewer, secretHandler.ListKeys)
 		projects.GET("/:id/members", viewer, accessHandler.ListMembers)
+		projects.GET("/:id/setup", viewer, setupHandler.Status)
+		projects.GET("/:id/setup/stream", viewer, setupHandler.Stream)
 		projects.GET("/:id/audit", maintainer, auditHandler.ListForProject)
 
 		// maintainer: day-to-day operations
@@ -161,7 +163,7 @@ func main() {
 		projects.POST("/:id/repo/repair", maintainer, repoHandler.Repair)
 		projects.POST("/:id/argocd", maintainer, argocdHandler.Register)
 		projects.POST("/:id/monitoring", maintainer, monitoringHandler.Setup)
-		projects.GET("/:id/setup/stream", maintainer, setupHandler.Stream)
+		projects.POST("/:id/setup", maintainer, setupHandler.Start)
 		projects.POST("/:id/deployments", maintainer, deploymentHandler.Trigger)
 		projects.POST("/:id/secrets", maintainer, secretHandler.Set)
 		projects.DELETE("/:id/secrets/:key", maintainer, secretHandler.Delete)

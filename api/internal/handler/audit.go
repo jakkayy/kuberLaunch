@@ -13,8 +13,8 @@ import (
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
 )
 
-// auditActions names the routes that change state. GET routes listed here
-// (the setup stream) also mutate and are audited.
+// auditActions names the routes that change state, plus sensitive reads
+// (pod logs) that are audited too.
 var auditActions = map[string]string{
 	"POST /api/v1/teams":                             "team.create",
 	"PUT /api/v1/teams/:team/members":                "team.member.set",
