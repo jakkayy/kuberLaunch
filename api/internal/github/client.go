@@ -224,6 +224,33 @@ func (c *Client) GetFileContent(ctx context.Context, slug, path string) (string,
 	return content, nil
 }
 
+// EnsureWebhook registers a workflow_run webhook delivering to url, unless a
+// hook with that URL already exists.
+func (c *Client) EnsureWebhook(ctx context.Context, slug, url, secret string) error {
+	hooks, _, err := c.gh.Repositories.ListHooks(ctx, c.owner, slug, nil)
+	if err != nil {
+		return fmt.Errorf("list hooks: %w", err)
+	}
+	for _, h := range hooks {
+		if h.Config != nil && h.Config.GetURL() == url {
+			return nil
+		}
+	}
+	_, _, err = c.gh.Repositories.CreateHook(ctx, c.owner, slug, &gh.Hook{
+		Events: []string{"workflow_run"},
+		Active: gh.Bool(true),
+		Config: &gh.HookConfig{
+			URL:         gh.String(url),
+			ContentType: gh.String("json"),
+			Secret:      gh.String(secret),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("create hook: %w", err)
+	}
+	return nil
+}
+
 // ArchiveRepo makes a repository read-only while keeping its code and history.
 func (c *Client) ArchiveRepo(ctx context.Context, slug string) error {
 	_, _, err := c.gh.Repositories.Edit(ctx, c.owner, slug, &gh.Repository{Archived: gh.Bool(true)})

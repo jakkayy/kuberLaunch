@@ -78,9 +78,20 @@ func (r *DeploymentRepository) SetImage(ctx context.Context, id, image string) e
 
 // FindActive returns all deployments that have not reached a terminal state.
 func (r *DeploymentRepository) FindActive(ctx context.Context) ([]model.Deployment, error) {
+	return r.findActive(ctx, "")
+}
+
+// FindActiveByProject returns a project's non-terminal deployments.
+func (r *DeploymentRepository) FindActiveByProject(ctx context.Context, projectID string) ([]model.Deployment, error) {
+	return r.findActive(ctx, projectID)
+}
+
+func (r *DeploymentRepository) findActive(ctx context.Context, projectID string) ([]model.Deployment, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, project_id, branch, workflow_run_id, image, triggered_by, status, created_at, updated_at
-		 FROM deployments WHERE status IN ('pending', 'building', 'deploying') ORDER BY created_at`)
+		 FROM deployments
+		 WHERE status IN ('pending', 'building', 'deploying') AND ($1 = '' OR project_id = $1)
+		 ORDER BY created_at`, projectID)
 	if err != nil {
 		return nil, err
 	}

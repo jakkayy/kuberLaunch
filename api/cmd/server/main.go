@@ -101,7 +101,7 @@ func main() {
 	projectSvc := service.NewProjectService(projectRepo, githubClient, argocdClient, grafanaClient, vaultClient, generator.Settings{
 		VaultServer:    cfg.Vault.ClusterURL,
 		VaultAuthMount: cfg.Vault.K8sMount,
-	})
+	}, githubHooks(cfg))
 	deploymentSvc := service.NewDeploymentService(deployRepo, projectRepo, githubClient, argocdClient)
 	secretSvc := service.NewSecretService(projectRepo, vaultClient)
 	projectHandler := handler.NewProjectHandler(projectSvc, accessSvc)
@@ -121,6 +121,11 @@ func main() {
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	// Webhooks authenticate with their own signatures, not user sessions.
+	webhookHandler := handler.NewWebhookHandler(deploymentSvc, cfg.Webhooks.GitHubSecret, cfg.Webhooks.ArgoCDToken)
+	r.POST("/webhooks/github", webhookHandler.GitHub)
+	r.POST("/webhooks/argocd", webhookHandler.ArgoCD)
 
 	viewer := accessHandler.RequireProjectRole(model.RoleViewer)
 	maintainer := accessHandler.RequireProjectRole(model.RoleMaintainer)
@@ -178,7 +183,12 @@ func main() {
 
 	watchCtx, stopWatch := context.WithCancel(context.Background())
 	defer stopWatch()
-	go deploymentSvc.Watch(watchCtx, 10*time.Second)
+	// With webhooks delivering status changes, polling is only a safety net.
+	pollInterval := 10 * time.Second
+	if githubHooks(cfg).URL != "" && cfg.Webhooks.ArgoCDToken != "" {
+		pollInterval = time.Minute
+	}
+	go deploymentSvc.Watch(watchCtx, pollInterval)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", cfg.Port),
@@ -202,4 +212,13 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("server shutdown: %v", err)
 	}
+}
+
+// githubHooks returns where generated repos should deliver workflow_run
+// events, or an empty target when webhooks are not configured.
+func githubHooks(cfg *config.Config) service.WebhookTarget {
+	if cfg.PublicURL == "" || cfg.Webhooks.GitHubSecret == "" {
+		return service.WebhookTarget{}
+	}
+	return service.WebhookTarget{URL: cfg.PublicURL + "/webhooks/github", Secret: cfg.Webhooks.GitHubSecret}
 }

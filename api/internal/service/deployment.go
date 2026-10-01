@@ -18,6 +18,7 @@ type deploymentStore interface {
 	FindByID(ctx context.Context, id string) (*model.Deployment, error)
 	FindByProject(ctx context.Context, projectID string) ([]model.Deployment, error)
 	FindActive(ctx context.Context) ([]model.Deployment, error)
+	FindActiveByProject(ctx context.Context, projectID string) ([]model.Deployment, error)
 	UpdateStatus(ctx context.Context, id string, status model.DeploymentStatus) error
 	SetWorkflowRunID(ctx context.Context, id string, runID int64) error
 	SetImage(ctx context.Context, id, image string) error
@@ -25,6 +26,8 @@ type deploymentStore interface {
 
 type projectFinder interface {
 	FindByID(ctx context.Context, id string) (*model.Project, error)
+	FindBySlug(ctx context.Context, slug string) (*model.Project, error)
+	FindByArgoApp(ctx context.Context, app string) (*model.Project, error)
 }
 
 type workflowAPI interface {
@@ -184,37 +187,115 @@ func (s *DeploymentService) PollStatus(ctx context.Context, deployID string) (mo
 		if err != nil || run == nil {
 			return model.DeploymentStatusBuilding, err
 		}
-		if d.WorkflowRunID == nil {
-			_ = s.deployRepo.SetWorkflowRunID(ctx, deployID, run.ID)
-		}
-		switch run.Conclusion {
-		case "success":
-			_ = s.deployRepo.SetImage(ctx, deployID, expectedImage(s.github.Owner(), p.Slug, run.HeadSHA))
-			_ = s.deployRepo.UpdateStatus(ctx, deployID, model.DeploymentStatusDeploying)
-			return model.DeploymentStatusDeploying, nil
-		case "failure", "cancelled", "timed_out", "startup_failure", "action_required":
-			_ = s.deployRepo.UpdateStatus(ctx, deployID, model.DeploymentStatusFailed)
-			return model.DeploymentStatusFailed, nil
-		}
-		return model.DeploymentStatusBuilding, nil
+		return s.applyRun(ctx, d, p, run), nil
 	}
 
 	// Phase 2: poll ArgoCD for sync + health
 	if d.Status == model.DeploymentStatusDeploying && p.ArgocdApp != "" && s.argocd != nil {
 		appStatus, err := s.argocd.GetAppStatus(ctx, p.ArgocdApp)
 		if err == nil {
-			if appStatus.Health == "Healthy" && appStatus.Sync == "Synced" && runsImage(appStatus.Images, d.Image) {
-				_ = s.deployRepo.UpdateStatus(ctx, deployID, model.DeploymentStatusSuccess)
-				return model.DeploymentStatusSuccess, nil
-			}
-			if appStatus.Health == "Degraded" {
-				_ = s.deployRepo.UpdateStatus(ctx, deployID, model.DeploymentStatusFailed)
-				return model.DeploymentStatusFailed, nil
-			}
+			return s.applyAppStatus(ctx, d, appStatus), nil
 		}
 	}
 
 	return d.Status, nil
+}
+
+// applyRun advances a building deployment from its workflow run.
+func (s *DeploymentService) applyRun(ctx context.Context, d *model.Deployment, p *model.Project, run *gh.WorkflowRun) model.DeploymentStatus {
+	if d.WorkflowRunID == nil {
+		_ = s.deployRepo.SetWorkflowRunID(ctx, d.ID, run.ID)
+		d.WorkflowRunID = &run.ID
+	}
+	switch run.Conclusion {
+	case "success":
+		d.Image = expectedImage(s.github.Owner(), p.Slug, run.HeadSHA)
+		_ = s.deployRepo.SetImage(ctx, d.ID, d.Image)
+		return s.setStatus(ctx, d, model.DeploymentStatusDeploying)
+	case "failure", "cancelled", "timed_out", "startup_failure", "action_required":
+		return s.setStatus(ctx, d, model.DeploymentStatusFailed)
+	}
+	return d.Status
+}
+
+// applyAppStatus advances a deploying deployment from the ArgoCD app state.
+func (s *DeploymentService) applyAppStatus(ctx context.Context, d *model.Deployment, st *argocd.AppStatus) model.DeploymentStatus {
+	switch {
+	case st.Health == "Healthy" && st.Sync == "Synced" && runsImage(st.Images, d.Image):
+		return s.setStatus(ctx, d, model.DeploymentStatusSuccess)
+	case st.Health == "Degraded":
+		return s.setStatus(ctx, d, model.DeploymentStatusFailed)
+	}
+	return d.Status
+}
+
+func (s *DeploymentService) setStatus(ctx context.Context, d *model.Deployment, status model.DeploymentStatus) model.DeploymentStatus {
+	_ = s.deployRepo.UpdateStatus(ctx, d.ID, status)
+	d.Status = status
+	return status
+}
+
+// WorkflowRunEvent is the part of a GitHub workflow_run webhook we use.
+type WorkflowRunEvent struct {
+	Repo      string // repository name = project slug
+	Branch    string
+	Event     string // what triggered the run, e.g. workflow_dispatch
+	CreatedAt time.Time
+	Run       gh.WorkflowRun
+}
+
+// HandleWorkflowRun applies a workflow_run webhook to the deployment that
+// dispatched the run, if any.
+func (s *DeploymentService) HandleWorkflowRun(ctx context.Context, ev WorkflowRunEvent) error {
+	if s.github == nil {
+		return nil
+	}
+	p, err := s.projectRepo.FindBySlug(ctx, ev.Repo)
+	if err != nil || p == nil {
+		return err
+	}
+	active, err := s.deployRepo.FindActiveByProject(ctx, p.ID)
+	if err != nil {
+		return err
+	}
+	for i := range active {
+		d := &active[i]
+		if d.Status != model.DeploymentStatusBuilding || !runMatches(d, ev) {
+			continue
+		}
+		s.applyRun(ctx, d, p, &ev.Run)
+		return nil
+	}
+	return nil
+}
+
+// runMatches mirrors findRun: the stored run ID, or the first dispatched run
+// on the deployment's branch created after the deployment.
+func runMatches(d *model.Deployment, ev WorkflowRunEvent) bool {
+	if d.WorkflowRunID != nil {
+		return *d.WorkflowRunID == ev.Run.ID
+	}
+	return ev.Event == "workflow_dispatch" && ev.Branch == d.Branch &&
+		!ev.CreatedAt.Before(d.CreatedAt.Add(-runLookupSkew))
+}
+
+// HandleAppStatus applies an ArgoCD notification for app to its project's
+// deploying deployments.
+func (s *DeploymentService) HandleAppStatus(ctx context.Context, app string, st *argocd.AppStatus) error {
+	p, err := s.projectRepo.FindByArgoApp(ctx, app)
+	if err != nil || p == nil {
+		return err
+	}
+	active, err := s.deployRepo.FindActiveByProject(ctx, p.ID)
+	if err != nil {
+		return err
+	}
+	for i := range active {
+		if active[i].Status == model.DeploymentStatusDeploying {
+			s.applyAppStatus(ctx, &active[i], st)
+		}
+	}
+	return nil
 }
 
 // expectedImage is the image tag the generated CI workflow pushes for a commit.

@@ -49,6 +49,16 @@ func (s *fakeDeployStore) FindActive(context.Context) ([]model.Deployment, error
 	}
 	return out, nil
 }
+func (s *fakeDeployStore) FindActiveByProject(ctx context.Context, projectID string) ([]model.Deployment, error) {
+	all, _ := s.FindActive(ctx)
+	var out []model.Deployment
+	for _, d := range all {
+		if d.ProjectID == projectID {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
 func (s *fakeDeployStore) UpdateStatus(_ context.Context, id string, st model.DeploymentStatus) error {
 	s.byID[id].Status = st
 	return nil
@@ -66,6 +76,22 @@ type fakeProjects map[string]*model.Project
 
 func (f fakeProjects) FindByID(_ context.Context, id string) (*model.Project, error) {
 	return f[id], nil
+}
+func (f fakeProjects) FindBySlug(_ context.Context, slug string) (*model.Project, error) {
+	for _, p := range f {
+		if p.Slug == slug {
+			return p, nil
+		}
+	}
+	return nil, nil
+}
+func (f fakeProjects) FindByArgoApp(_ context.Context, app string) (*model.Project, error) {
+	for _, p := range f {
+		if p.ArgocdApp == app {
+			return p, nil
+		}
+	}
+	return nil, nil
 }
 
 type fakeGitHub struct {
@@ -274,5 +300,46 @@ func TestPollStatusFailsWhenProjectDeleted(t *testing.T) {
 	got, err := newTestService(store, &fakeGitHub{}, nil).PollStatus(context.Background(), "d1")
 	if err != nil || got != model.DeploymentStatusFailed || store.byID["d1"].Status != model.DeploymentStatusFailed {
 		t.Fatalf("status = %s (stored %s), err %v", got, store.byID["d1"].Status, err)
+	}
+}
+
+func TestHandleWorkflowRun(t *testing.T) {
+	d := deployment(model.DeploymentStatusBuilding)
+	store := newFakeDeployStore(d)
+	s := newTestService(store, &fakeGitHub{}, nil)
+	ev := WorkflowRunEvent{
+		Repo: "demo", Branch: "main", Event: "workflow_dispatch", CreatedAt: d.CreatedAt.Add(time.Second),
+		Run: gh.WorkflowRun{ID: 5, Status: "completed", Conclusion: "success", HeadSHA: "abcdef1234"},
+	}
+
+	// A push-triggered run for the same branch must not complete the deployment.
+	push := ev
+	push.Event = "push"
+	if err := s.HandleWorkflowRun(context.Background(), push); err != nil {
+		t.Fatal(err)
+	}
+	if store.byID["d1"].Status != model.DeploymentStatusBuilding {
+		t.Fatalf("push run changed status to %s", store.byID["d1"].Status)
+	}
+
+	if err := s.HandleWorkflowRun(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	got := store.byID["d1"]
+	if got.Status != model.DeploymentStatusDeploying || *got.WorkflowRunID != 5 || got.Image != "ghcr.io/acme/demo:sha-abcdef1" {
+		t.Fatalf("deployment = %+v", got)
+	}
+}
+
+func TestHandleAppStatus(t *testing.T) {
+	d := deployment(model.DeploymentStatusDeploying)
+	d.Image = "ghcr.io/acme/demo:sha-abcdef1"
+	store := newFakeDeployStore(d)
+	s := newTestService(store, &fakeGitHub{}, &fakeArgo{})
+	err := s.HandleAppStatus(context.Background(), "demo", &argocd.AppStatus{
+		Health: "Healthy", Sync: "Synced", Images: []string{"ghcr.io/acme/demo:sha-abcdef1"},
+	})
+	if err != nil || store.byID["d1"].Status != model.DeploymentStatusSuccess {
+		t.Fatalf("status = %s, err %v", store.byID["d1"].Status, err)
 	}
 }

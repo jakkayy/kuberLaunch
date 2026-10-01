@@ -11,14 +11,23 @@ import (
 )
 
 type Config struct {
-	Port    string
-	Env     string
-	Auth    AuthConfig
-	DB      DBConfig
-	GitHub  GitHubConfig
-	ArgoCD  ArgoCDConfig
-	Grafana GrafanaConfig
-	Vault   VaultConfig
+	Port string
+	Env  string
+	// PublicURL is the API's externally reachable base URL, used to register
+	// webhooks (e.g. https://kuberlaunch.example.com). Webhooks are off when empty.
+	PublicURL string
+	Webhooks  WebhookConfig
+	Auth      AuthConfig
+	DB        DBConfig
+	GitHub    GitHubConfig
+	ArgoCD    ArgoCDConfig
+	Grafana   GrafanaConfig
+	Vault     VaultConfig
+}
+
+type WebhookConfig struct {
+	GitHubSecret string // HMAC secret for X-Hub-Signature-256
+	ArgoCDToken  string // bearer token sent by argocd-notifications
 }
 
 type AuthConfig struct {
@@ -96,8 +105,13 @@ func Load() *Config {
 	_ = godotenv.Load()
 
 	return &Config{
-		Port: getEnv("PORT", "8080"),
-		Env:  getEnv("ENV", "development"),
+		Port:      getEnv("PORT", "8080"),
+		Env:       getEnv("ENV", "development"),
+		PublicURL: strings.TrimRight(getEnv("PLATFORM_PUBLIC_URL", ""), "/"),
+		Webhooks: WebhookConfig{
+			GitHubSecret: getSecret("GITHUB_WEBHOOK_SECRET", ""),
+			ArgoCDToken:  getSecret("ARGOCD_WEBHOOK_TOKEN", ""),
+		},
 		Auth: AuthConfig{
 			JWTSecret: getSecret("AUTH_JWT_SECRET", ""),
 			Admins:    strings.Split(getEnv("PLATFORM_ADMINS", ""), ","),

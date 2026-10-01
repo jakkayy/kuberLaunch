@@ -21,14 +21,22 @@ type ProjectService struct {
 	grafana *grafana.Client
 	vault   *vault.Client
 	gen     generator.Settings
+	hooks   WebhookTarget
+}
+
+// WebhookTarget is where generated repos send workflow_run events.
+// URL is empty when webhooks are disabled.
+type WebhookTarget struct {
+	URL    string
+	Secret string
 }
 
 func NewProjectService(repo *repository.ProjectRepository, github *gh.Client, argocd *argocd.Client,
-	grafana *grafana.Client, vault *vault.Client, gen generator.Settings) *ProjectService {
+	grafana *grafana.Client, vault *vault.Client, gen generator.Settings, hooks WebhookTarget) *ProjectService {
 	if github != nil {
 		gen.Owner = github.Owner()
 	}
-	return &ProjectService{repo: repo, github: github, argocd: argocd, grafana: grafana, vault: vault, gen: gen}
+	return &ProjectService{repo: repo, github: github, argocd: argocd, grafana: grafana, vault: vault, gen: gen, hooks: hooks}
 }
 
 // namespaces lists the Kubernetes namespaces a project deploys to.
@@ -289,6 +297,12 @@ func (s *ProjectService) ConnectGitHub(ctx context.Context, id string) (string, 
 		repoURL, err = s.github.CreateRepo(ctx, p.Slug, files)
 		if err != nil {
 			return "", fmt.Errorf("create GitHub repo: %w", err)
+		}
+	}
+
+	if s.hooks.URL != "" {
+		if err := s.github.EnsureWebhook(ctx, p.Slug, s.hooks.URL, s.hooks.Secret); err != nil {
+			return "", fmt.Errorf("register webhook: %w", err)
 		}
 	}
 

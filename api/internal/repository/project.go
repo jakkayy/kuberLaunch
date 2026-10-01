@@ -40,6 +40,29 @@ func (r *ProjectRepository) FindByID(ctx context.Context, id string) (*model.Pro
 	return &p, err
 }
 
+func (r *ProjectRepository) FindBySlug(ctx context.Context, slug string) (*model.Project, error) {
+	return r.findOne(ctx, "slug", slug)
+}
+
+func (r *ProjectRepository) FindByArgoApp(ctx context.Context, app string) (*model.Project, error) {
+	return r.findOne(ctx, "argocd_app", app)
+}
+
+// findOne looks up a live project by a unique column; column is never user input.
+func (r *ProjectRepository) findOne(ctx context.Context, column, value string) (*model.Project, error) {
+	var p model.Project
+	query := `SELECT id, name, slug, runtime, database, cache, repo_url, argocd_app, grafana_url, status, created_at, updated_at
+	          FROM projects WHERE ` + column + ` = $1 AND deleted_at IS NULL`
+	err := r.db.QueryRowContext(ctx, query, value).Scan(
+		&p.ID, &p.Name, &p.Slug, &p.Runtime, &p.Database,
+		&p.Cache, &p.RepoURL, &p.ArgocdApp, &p.GrafanaURL, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return &p, err
+}
+
 func (r *ProjectRepository) FindAll(ctx context.Context) ([]model.Project, error) {
 	query := `SELECT id, name, slug, runtime, database, cache, repo_url, argocd_app, grafana_url, status, created_at, updated_at
 	          FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC`

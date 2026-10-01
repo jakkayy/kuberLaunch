@@ -1,0 +1,51 @@
+# Push ArgoCD app status changes to kuberLaunch (POST /webhooks/argocd) so
+# deployments complete without polling. Merge into argocd-notifications-cm and
+# store the token (same value as the API's ARGOCD_WEBHOOK_TOKEN) in
+# argocd-notifications-secret under key kuberlaunch-token.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  service.webhook.kuberlaunch: |
+    url: http://kuberlaunch-api.kuberlaunch.svc.cluster.local:8080
+    headers:
+      - name: Authorization
+        value: Bearer $kuberlaunch-token
+      - name: Content-Type
+        value: application/json
+
+  template.kuberlaunch-status: |
+    webhook:
+      kuberlaunch:
+        method: POST
+        path: /webhooks/argocd
+        body: |
+          {
+            "app": "{{.app.metadata.name}}",
+            "health": "{{.app.status.health.status}}",
+            "sync": "{{.app.status.sync.status}}",
+            "revision": "{{.app.status.sync.revision}}",
+            "images": {{ toJson .app.status.summary.images }}
+          }
+
+  # Fire on every change of sync/health status.
+  trigger.on-kuberlaunch-change: |
+    - when: "true"
+      oncePer: app.status.sync.revision + app.status.health.status + app.status.sync.status
+      send: [kuberlaunch-status]
+
+  # Subscribe every app in kuberLaunch-managed projects.
+  subscriptions: |
+    - recipients: [kuberlaunch]
+      triggers: [on-kuberlaunch-change]
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argocd-notifications-secret
+  namespace: argocd
+type: Opaque
+stringData:
+  kuberlaunch-token: change-me
