@@ -21,7 +21,8 @@ var templateFS embed.FS
 //	1: initial templates
 //	2: per-project Vault SecretStore, ArgoCD AppProject, CI concurrency
 //	3: dev/staging/prod environments, ServiceMonitor inside the Helm chart
-const TemplateVersion = 3
+//	4: CI no longer needs cluster credentials (platform manages pull secrets)
+const TemplateVersion = 4
 
 // Settings are platform-wide values rendered into every project.
 type Settings struct {

@@ -8,6 +8,9 @@ import (
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
 )
 
+// PullSecretName matches image.pullSecret in the generated values.yaml.
+const PullSecretName = "ghcr-secret"
+
 // envTemplateVersion is the first template version with per-environment
 // values files; older repos only have helm/values.yaml.
 const envTemplateVersion = 3
@@ -37,6 +40,15 @@ func (s *ProjectService) RegisterArgoCD(ctx context.Context, id string) (string,
 	if s.vault != nil {
 		if err := s.vault.EnsureProjectAccess(ctx, s.gen.VaultAuthMount, p.Slug, namespaces(p)); err != nil {
 			return "", fmt.Errorf("grant Vault access: %w", err)
+		}
+	}
+	// Image pull credentials live in the cluster, managed by the platform,
+	// so generated CI workflows never need cluster access.
+	if s.kube != nil && s.pull != nil {
+		for _, ns := range namespaces(p) {
+			if err := s.kube.EnsurePullSecret(ctx, ns, PullSecretName, *s.pull); err != nil {
+				return "", fmt.Errorf("pull secret for %s: %w", ns, err)
+			}
 		}
 	}
 	if err := s.argocd.EnsureProject(ctx, p.Slug, p.RepoURL); err != nil {

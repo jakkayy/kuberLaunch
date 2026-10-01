@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -35,5 +36,35 @@ func TestStreamLogsNoPods(t *testing.T) {
 	}
 	if _, open := <-out; open {
 		t.Fatal("out should be closed")
+	}
+}
+
+func TestEnsurePullSecret(t *testing.T) {
+	cs := fake.NewSimpleClientset()
+	c := NewForClientset(cs)
+	creds := RegistryCredentials{Server: "ghcr.io", Username: "bot", Token: "t1"}
+	ctx := context.Background()
+
+	if err := c.EnsurePullSecret(ctx, "demo-dev", "ghcr-secret", creds); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cs.CoreV1().Namespaces().Get(ctx, "demo-dev", metav1.GetOptions{}); err != nil {
+		t.Fatalf("namespace not created: %v", err)
+	}
+
+	// Rotating the token updates the existing secret.
+	creds.Token = "t2"
+	if err := c.EnsurePullSecret(ctx, "demo-dev", "ghcr-secret", creds); err != nil {
+		t.Fatal(err)
+	}
+	sec, err := cs.CoreV1().Secrets("demo-dev").Get(ctx, "ghcr-secret", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sec.Type != corev1.SecretTypeDockerConfigJson {
+		t.Fatalf("type = %s", sec.Type)
+	}
+	if cfg := string(sec.Data[corev1.DockerConfigJsonKey]); !strings.Contains(cfg, `"password":"t2"`) || !strings.Contains(cfg, `"ghcr.io"`) {
+		t.Fatalf("dockerconfigjson = %s", cfg)
 	}
 }

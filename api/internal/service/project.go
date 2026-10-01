@@ -10,6 +10,7 @@ import (
 	"github.com/jakkayy/kuberlauncher/api/internal/generator"
 	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/grafana"
+	"github.com/jakkayy/kuberlauncher/api/internal/kube"
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
 	"github.com/jakkayy/kuberlauncher/api/internal/validate"
@@ -26,6 +27,8 @@ type ProjectService struct {
 	gen       generator.Settings
 	hooks     WebhookTarget
 	argocdURL string
+	kube      *kube.Client
+	pull      *kube.RegistryCredentials
 }
 
 // ProjectDeps are the ProjectService dependencies. Integration clients are
@@ -41,6 +44,10 @@ type ProjectDeps struct {
 	Hooks        WebhookTarget
 	// ArgoCDPublicURL is the ArgoCD UI address shown to users.
 	ArgoCDPublicURL string
+	// Kube creates namespaces and image pull secrets; PullCredentials is nil
+	// when images are public and no pull secret is needed.
+	Kube            *kube.Client
+	PullCredentials *kube.RegistryCredentials
 }
 
 // WebhookTarget is where generated repos send workflow_run events.
@@ -58,6 +65,7 @@ func NewProjectService(d ProjectDeps) *ProjectService {
 		repo: d.Projects, envs: d.Environments, github: d.GitHub, argocd: d.ArgoCD,
 		grafana: d.Grafana, vault: d.Vault, gen: d.Generator, hooks: d.Hooks,
 		argocdURL: strings.TrimRight(d.ArgoCDPublicURL, "/"),
+		kube:      d.Kube, pull: d.PullCredentials,
 	}
 }
 

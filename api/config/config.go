@@ -17,12 +17,21 @@ type Config struct {
 	// webhooks (e.g. https://kuberlaunch.example.com). Webhooks are off when empty.
 	PublicURL string
 	Webhooks  WebhookConfig
+	Registry  RegistryConfig
 	Auth      AuthConfig
 	DB        DBConfig
 	GitHub    GitHubConfig
 	ArgoCD    ArgoCDConfig
 	Grafana   GrafanaConfig
 	Vault     VaultConfig
+}
+
+// RegistryConfig holds read-only credentials the platform installs as image
+// pull secrets in every project namespace.
+type RegistryConfig struct {
+	Server   string
+	Username string
+	Token    string
 }
 
 type WebhookConfig struct {
@@ -112,6 +121,11 @@ func Load() *Config {
 		Webhooks: WebhookConfig{
 			GitHubSecret: getSecret("GITHUB_WEBHOOK_SECRET", ""),
 			ArgoCDToken:  getSecret("ARGOCD_WEBHOOK_TOKEN", ""),
+		},
+		Registry: RegistryConfig{
+			Server:   getEnv("REGISTRY_SERVER", "ghcr.io"),
+			Username: getEnv("REGISTRY_PULL_USERNAME", ""),
+			Token:    getSecret("REGISTRY_PULL_TOKEN", ""),
 		},
 		Auth: AuthConfig{
 			JWTSecret: getSecret("AUTH_JWT_SECRET", ""),

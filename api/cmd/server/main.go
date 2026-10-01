@@ -112,6 +112,8 @@ func main() {
 		},
 		Hooks:           githubHooks(cfg),
 		ArgoCDPublicURL: cfg.ArgoCD.PublicURL,
+		Kube:            kubeClient,
+		PullCredentials: pullCredentials(cfg),
 	})
 	deploymentSvc := service.NewDeploymentService(deployRepo, projectRepo, envRepo, githubClient, argocdClient)
 	secretSvc := service.NewSecretService(projectRepo, vaultClient)
@@ -239,4 +241,13 @@ func githubHooks(cfg *config.Config) service.WebhookTarget {
 		return service.WebhookTarget{}
 	}
 	return service.WebhookTarget{URL: cfg.PublicURL + "/webhooks/github", Secret: cfg.Webhooks.GitHubSecret}
+}
+
+// pullCredentials returns registry credentials for image pull secrets, or
+// nil when none are configured (public images).
+func pullCredentials(cfg *config.Config) *kube.RegistryCredentials {
+	if cfg.Registry.Username == "" || cfg.Registry.Token == "" {
+		return nil
+	}
+	return &kube.RegistryCredentials{Server: cfg.Registry.Server, Username: cfg.Registry.Username, Token: cfg.Registry.Token}
 }
