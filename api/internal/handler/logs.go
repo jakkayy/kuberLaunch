@@ -1,25 +1,24 @@
 package handler
 
 import (
-	"bufio"
-	"context"
 	"fmt"
 	"net/http"
-	"os/exec"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jakkayy/kuberlauncher/api/internal/kube"
 	"github.com/jakkayy/kuberlauncher/api/internal/service"
 )
 
 type LogsHandler struct {
 	projectSvc *service.ProjectService
+	kube       *kube.Client
 }
 
-func NewLogsHandler(svc *service.ProjectService) *LogsHandler {
-	return &LogsHandler{projectSvc: svc}
+func NewLogsHandler(svc *service.ProjectService, kube *kube.Client) *LogsHandler {
+	return &LogsHandler{projectSvc: svc, kube: kube}
 }
 
-// Stream streams pod logs via SSE using kubectl.
+// Stream streams pod logs via SSE using the Kubernetes API.
 // GET /api/v1/projects/:id/logs
 func (h *LogsHandler) Stream(c *gin.Context) {
 	id := c.Param("id")
@@ -38,36 +37,23 @@ func (h *LogsHandler) Stream(c *gin.Context) {
 	c.Header("Connection", "keep-alive")
 	c.Header("Access-Control-Allow-Origin", "*")
 
-	ctx, cancel := context.WithCancel(c.Request.Context())
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "kubectl", "logs",
-		"-n", namespace,
-		"-l", labelSelector,
-		"--all-containers=true",
-		"--follow=true",
-		"--tail=100",
-		"--prefix=true",
-	)
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		fmt.Fprintf(c.Writer, "data: {\"error\": \"failed to start log stream\"}\n\n")
-		c.Writer.Flush()
-		return
-	}
-	cmd.Stderr = cmd.Stdout
-
-	if err := cmd.Start(); err != nil {
-		fmt.Fprintf(c.Writer, "data: {\"error\": \"kubectl not available\"}\n\n")
+	if h.kube == nil {
+		fmt.Fprintf(c.Writer, "data: %s\n\n", jsonEscape("error: Kubernetes integration not configured"))
 		c.Writer.Flush()
 		return
 	}
 
-	scanner := bufio.NewScanner(stdout)
-	for scanner.Scan() {
-		line := scanner.Text()
+	ctx := c.Request.Context()
+	lines := make(chan string, 100)
+	errc := make(chan error, 1)
+	go func() { errc <- h.kube.StreamLogs(ctx, namespace, labelSelector, 100, lines) }()
+
+	for line := range lines {
 		fmt.Fprintf(c.Writer, "data: %s\n\n", jsonEscape(line))
+		c.Writer.Flush()
+	}
+	if err := <-errc; err != nil {
+		fmt.Fprintf(c.Writer, "data: %s\n\n", jsonEscape("error: "+err.Error()))
 		c.Writer.Flush()
 	}
 }

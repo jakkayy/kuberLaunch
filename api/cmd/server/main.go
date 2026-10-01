@@ -17,6 +17,7 @@ import (
 	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/grafana"
 	"github.com/jakkayy/kuberlauncher/api/internal/handler"
+	"github.com/jakkayy/kuberlauncher/api/internal/kube"
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
 	"github.com/jakkayy/kuberlauncher/api/internal/service"
 	"github.com/jakkayy/kuberlauncher/api/internal/vault"
@@ -59,6 +60,12 @@ func main() {
 		log.Printf("Vault integration enabled (%s)", cfg.Vault.URL)
 	}
 
+	kubeClient, err := kube.New()
+	if err != nil {
+		log.Printf("Kubernetes integration disabled: %v", err)
+		kubeClient = nil
+	}
+
 	projectRepo := repository.NewProjectRepository(database)
 	deployRepo := repository.NewDeploymentRepository(database)
 	projectSvc := service.NewProjectService(projectRepo, githubClient, argocdClient, grafanaClient)
@@ -71,7 +78,7 @@ func main() {
 	setupHandler := handler.NewSetupHandler(projectSvc)
 	deploymentHandler := handler.NewDeploymentHandler(deploymentSvc, projectSvc)
 	secretHandler := handler.NewSecretHandler(secretSvc)
-	logsHandler := handler.NewLogsHandler(projectSvc)
+	logsHandler := handler.NewLogsHandler(projectSvc, kubeClient)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
