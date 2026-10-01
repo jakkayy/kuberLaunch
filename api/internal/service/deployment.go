@@ -134,23 +134,22 @@ func (s *DeploymentService) PollStatus(ctx context.Context, deployID string) (mo
 		return d.Status, fmt.Errorf("project not found")
 	}
 
-	// Phase 1: poll GitHub Actions for run status
+	// Phase 1: poll the GitHub Actions run that this deployment dispatched
 	if d.Status == model.DeploymentStatusBuilding && s.github != nil {
-		runID, status, conclusion, err := s.github.GetLatestWorkflowRun(ctx, p.Slug)
-		if err == nil && runID > 0 {
-			if d.WorkflowRunID == nil {
-				_ = s.deployRepo.SetWorkflowRunID(ctx, deployID, runID)
-			}
-			switch conclusion {
-			case "success":
-				_ = s.deployRepo.UpdateStatus(ctx, deployID, model.DeploymentStatusDeploying)
-				return model.DeploymentStatusDeploying, nil
-			case "failure", "cancelled", "timed_out":
-				_ = s.deployRepo.UpdateStatus(ctx, deployID, model.DeploymentStatusFailed)
-				return model.DeploymentStatusFailed, nil
-			default:
-				_ = status // still in_progress / queued
-			}
+		run, err := s.findRun(ctx, d, p.Slug)
+		if err != nil || run == nil {
+			return model.DeploymentStatusBuilding, err
+		}
+		if d.WorkflowRunID == nil {
+			_ = s.deployRepo.SetWorkflowRunID(ctx, deployID, run.ID)
+		}
+		switch run.Conclusion {
+		case "success":
+			_ = s.deployRepo.UpdateStatus(ctx, deployID, model.DeploymentStatusDeploying)
+			return model.DeploymentStatusDeploying, nil
+		case "failure", "cancelled", "timed_out", "startup_failure", "action_required":
+			_ = s.deployRepo.UpdateStatus(ctx, deployID, model.DeploymentStatusFailed)
+			return model.DeploymentStatusFailed, nil
 		}
 		return model.DeploymentStatusBuilding, nil
 	}
@@ -171,6 +170,19 @@ func (s *DeploymentService) PollStatus(ctx context.Context, deployID string) (mo
 	}
 
 	return d.Status, nil
+}
+
+// runLookupSkew tolerates clock drift between this server and GitHub when
+// matching a dispatched run to the deployment that triggered it.
+const runLookupSkew = 30 * time.Second
+
+// findRun returns the workflow run belonging to d: by stored ID once known,
+// otherwise the first workflow_dispatch run on d.Branch created after d.
+func (s *DeploymentService) findRun(ctx context.Context, d *model.Deployment, slug string) (*gh.WorkflowRun, error) {
+	if d.WorkflowRunID != nil {
+		return s.github.GetWorkflowRun(ctx, slug, *d.WorkflowRunID)
+	}
+	return s.github.FindDispatchedRun(ctx, slug, d.Branch, d.CreatedAt.Add(-runLookupSkew))
 }
 
 // ensureWorkflowDispatch pushes an updated ci.yml with workflow_dispatch if it's missing.

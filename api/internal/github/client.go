@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"time"
 
 	gh "github.com/google/go-github/v66/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/generator"
@@ -135,21 +136,52 @@ func (c *Client) TriggerWorkflow(ctx context.Context, slug, branch string) error
 	return err
 }
 
-// GetLatestWorkflowRun returns the most recent run ID and conclusion for the CI workflow.
-// conclusion is empty if the run is still in progress.
-func (c *Client) GetLatestWorkflowRun(ctx context.Context, slug string) (runID int64, status, conclusion string, err error) {
+// WorkflowRun is the subset of a GitHub Actions run that deployments track.
+type WorkflowRun struct {
+	ID         int64
+	Status     string // queued | in_progress | completed
+	Conclusion string // empty until completed
+	HeadSHA    string
+}
+
+func toWorkflowRun(r *gh.WorkflowRun) *WorkflowRun {
+	return &WorkflowRun{
+		ID:         r.GetID(),
+		Status:     r.GetStatus(),
+		Conclusion: r.GetConclusion(),
+		HeadSHA:    r.GetHeadSHA(),
+	}
+}
+
+// FindDispatchedRun returns the earliest workflow_dispatch run of ci.yml on branch
+// created at or after since, or nil if GitHub has not created it yet.
+func (c *Client) FindDispatchedRun(ctx context.Context, slug, branch string, since time.Time) (*WorkflowRun, error) {
 	runs, _, err := c.gh.Actions.ListWorkflowRunsByFileName(
 		ctx, c.owner, slug, "ci.yml",
-		&gh.ListWorkflowRunsOptions{ListOptions: gh.ListOptions{PerPage: 1}},
+		&gh.ListWorkflowRunsOptions{
+			Event:       "workflow_dispatch",
+			Branch:      branch,
+			Created:     ">=" + since.UTC().Format(time.RFC3339),
+			ListOptions: gh.ListOptions{PerPage: 20},
+		},
 	)
 	if err != nil {
-		return 0, "", "", err
+		return nil, err
 	}
-	if runs.GetTotalCount() == 0 {
-		return 0, "", "", nil
+	if len(runs.WorkflowRuns) == 0 {
+		return nil, nil
 	}
-	r := runs.WorkflowRuns[0]
-	return r.GetID(), r.GetStatus(), r.GetConclusion(), nil
+	// Runs are returned newest first; the earliest one after since is ours.
+	return toWorkflowRun(runs.WorkflowRuns[len(runs.WorkflowRuns)-1]), nil
+}
+
+// GetWorkflowRun returns a workflow run by ID.
+func (c *Client) GetWorkflowRun(ctx context.Context, slug string, runID int64) (*WorkflowRun, error) {
+	r, _, err := c.gh.Actions.GetWorkflowRunByID(ctx, c.owner, slug, runID)
+	if err != nil {
+		return nil, err
+	}
+	return toWorkflowRun(r), nil
 }
 
 // GetFileContent returns the decoded content of a file in the repo.
