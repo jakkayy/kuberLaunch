@@ -51,12 +51,17 @@ jobs:
       - name: Render sample project
         working-directory: api
         run: go run ./cmd/render -runtime ${{ matrix.runtime }} -out "$RUNNER_TEMP/out"
-      - name: helm lint
-        run: helm lint "$RUNNER_TEMP/out/helm"
-      - name: kubeconform
+      - name: helm lint (every environment)
         run: |
-          helm template demo-service "$RUNNER_TEMP/out/helm" \
-            | go run github.com/yannh/kubeconform/cmd/kubeconform@v0.7.0 -strict -ignore-missing-schemas -summary
+          for env in dev staging prod; do
+            helm lint "$RUNNER_TEMP/out/helm" -f "$RUNNER_TEMP/out/helm/values-$env.yaml"
+          done
+      - name: kubeconform (every environment)
+        run: |
+          for env in dev staging prod; do
+            helm template demo-service "$RUNNER_TEMP/out/helm" -f "$RUNNER_TEMP/out/helm/values-$env.yaml" \
+              | go run github.com/yannh/kubeconform/cmd/kubeconform@v0.7.0 -strict -ignore-missing-schemas -summary
+          done
       - name: actionlint generated workflow
         working-directory: ${{ runner.temp }}/out
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/ci.yml
