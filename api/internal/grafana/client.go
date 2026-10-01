@@ -7,22 +7,30 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
 type Client struct {
-	baseURL  string
-	username string
-	password string
-	http     *http.Client
+	baseURL   string
+	publicURL string
+	username  string
+	password  string
+	http      *http.Client
 }
 
-func New(url, username, password string) *Client {
+// New creates a Grafana client. url is used for API calls; publicURL is the
+// address users open in a browser (defaults to url when empty).
+func New(url, publicURL, username, password string) *Client {
+	if publicURL == "" {
+		publicURL = url
+	}
 	return &Client{
-		baseURL:  url,
-		username: username,
-		password: password,
-		http:     &http.Client{Timeout: 30 * time.Second},
+		baseURL:   url,
+		publicURL: strings.TrimRight(publicURL, "/"),
+		username:  username,
+		password:  password,
+		http:      &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -38,7 +46,6 @@ func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte,
 	}
 	req.SetBasicAuth(c.username, c.password)
 	req.Header.Set("Content-Type", "application/json")
-	req.Host = "grafana.localhost"
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -72,7 +79,7 @@ func (c *Client) EnsureFolder(ctx context.Context, slug string) (string, error) 
 }
 
 // CreateDashboard creates a pre-built dashboard for the project.
-// Returns the dashboard URL.
+// Returns the browser-facing dashboard URL.
 func (c *Client) CreateDashboard(ctx context.Context, slug, folderUID string) (string, error) {
 	dashboard := buildDashboard(slug)
 	payload := map[string]any{
@@ -96,7 +103,7 @@ func (c *Client) CreateDashboard(ctx context.Context, slug, folderUID string) (s
 	if err := json.Unmarshal(b, &result); err != nil {
 		return "", err
 	}
-	return result.URL, nil
+	return c.publicURL + result.URL, nil
 }
 
 // buildDashboard returns a Grafana dashboard JSON with CPU, Memory, and HTTP panels
@@ -104,10 +111,10 @@ func (c *Client) CreateDashboard(ctx context.Context, slug, folderUID string) (s
 func buildDashboard(slug string) map[string]any {
 	namespace := slug + "-dev"
 	return map[string]any{
-		"title": slug + " — Overview",
-		"uid":   "kuberlauncher-dash-" + slug,
-		"tags":  []string{"kuberlauncher", slug},
-		"time":  map[string]string{"from": "now-1h", "to": "now"},
+		"title":   slug + " — Overview",
+		"uid":     "kuberlauncher-dash-" + slug,
+		"tags":    []string{"kuberlauncher", slug},
+		"time":    map[string]string{"from": "now-1h", "to": "now"},
 		"refresh": "30s",
 		"panels": []map[string]any{
 			panel(1, "CPU Usage", 0, 0,
@@ -130,8 +137,8 @@ func panel(id int, title string, x, y int, expr string) map[string]any {
 		},
 		"targets": []map[string]any{
 			{
-				"datasource": map[string]string{"type": "prometheus", "uid": "prometheus"},
-				"expr":       expr,
+				"datasource":   map[string]string{"type": "prometheus", "uid": "prometheus"},
+				"expr":         expr,
 				"legendFormat": "{{pod}}",
 			},
 		},

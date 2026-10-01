@@ -37,7 +37,6 @@ func (c *Client) login(ctx context.Context) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Host = "argocd.localhost"
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -104,7 +103,6 @@ func (c *Client) RegisterApp(ctx context.Context, slug, repoURL string) (string,
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Host = "argocd.localhost"
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -135,7 +133,6 @@ func (c *Client) DeleteApp(ctx context.Context, appName string) error {
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Host = "argocd.localhost"
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -168,7 +165,6 @@ func (c *Client) disableAutoSync(ctx context.Context, appName, token string) err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Host = "argocd.localhost"
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -202,7 +198,6 @@ func (c *Client) RollbackApp(ctx context.Context, appName string) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Host = "argocd.localhost"
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -238,7 +233,6 @@ func (c *Client) GetAppStatus(ctx context.Context, appName string) (*AppStatus, 
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Host = "argocd.localhost"
 
 	resp, err := c.http.Do(req)
 	if err != nil {

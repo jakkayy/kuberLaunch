@@ -36,7 +36,6 @@ func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte,
 	}
 	req.Header.Set("X-Vault-Token", c.token)
 	req.Header.Set("Content-Type", "application/json")
-	req.Host = "vault.localhost"
 
 	resp, err := c.http.Do(req)
 	if err != nil {

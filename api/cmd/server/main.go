@@ -49,7 +49,7 @@ func main() {
 
 	var grafanaClient *grafana.Client
 	if cfg.Grafana.Password != "" {
-		grafanaClient = grafana.New(cfg.Grafana.URL, cfg.Grafana.Username, cfg.Grafana.Password)
+		grafanaClient = grafana.New(cfg.Grafana.URL, cfg.Grafana.PublicURL, cfg.Grafana.Username, cfg.Grafana.Password)
 		log.Printf("Grafana integration enabled (%s)", cfg.Grafana.URL)
 	}
 

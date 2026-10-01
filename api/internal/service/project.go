@@ -137,11 +137,10 @@ func (s *ProjectService) SetupMonitoring(ctx context.Context, id string) (string
 		return "", fmt.Errorf("create dashboard: %w", err)
 	}
 
-	fullURL := "http://grafana.localhost:8090" + dashURL
-	if err := s.repo.SetGrafanaURL(ctx, id, fullURL); err != nil {
-		return fullURL, err
+	if err := s.repo.SetGrafanaURL(ctx, id, dashURL); err != nil {
+		return dashURL, err
 	}
-	return fullURL, nil
+	return dashURL, nil
 }
 
 // RepairGitHub re-pushes all generated files to the existing GitHub repo.

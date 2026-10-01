@@ -24,9 +24,10 @@ type ArgoCDConfig struct {
 }
 
 type GrafanaConfig struct {
-	URL      string
-	Username string
-	Password string
+	URL       string
+	PublicURL string
+	Username  string
+	Password  string
 }
 
 type VaultConfig struct {
@@ -75,9 +76,10 @@ func Load() *Config {
 			Password: getEnv("ARGOCD_PASSWORD", ""),
 		},
 		Grafana: GrafanaConfig{
-			URL:      getEnv("GRAFANA_URL", "http://grafana.localhost:8090"),
-			Username: getEnv("GRAFANA_USERNAME", "admin"),
-			Password: getEnv("GRAFANA_PASSWORD", "admin"),
+			URL:       getEnv("GRAFANA_URL", "http://grafana.localhost:8090"),
+			PublicURL: getEnv("GRAFANA_PUBLIC_URL", ""),
+			Username:  getEnv("GRAFANA_USERNAME", "admin"),
+			Password:  getEnv("GRAFANA_PASSWORD", "admin"),
 		},
 		Vault: VaultConfig{
 			URL:   getEnv("VAULT_URL", "http://vault.localhost:8090"),
