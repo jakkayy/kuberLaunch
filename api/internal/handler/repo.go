@@ -28,7 +28,7 @@ func (h *RepoHandler) Connect(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"repo_url": repoURL,
-		"message": "GitHub repo created and files pushed successfully",
+		"message":  "GitHub repo created and files pushed successfully",
 	})
 }
 
