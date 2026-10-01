@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 
 export default function SecretsPanel({ projectId }: { projectId: string }) {
   const [keys, setKeys] = useState<string[]>([])
@@ -11,16 +11,21 @@ export default function SecretsPanel({ projectId }: { projectId: string }) {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [error, setError] = useState('')
 
-  const fetchKeys = useCallback(async () => {
-    const res = await fetch(`/api/projects/${projectId}/secrets`)
-    if (res.ok) {
-      const data = await res.json()
-      setKeys(data.keys ?? [])
-    }
-    setLoading(false)
-  }, [projectId])
+  // Bumping reloadToken re-runs the fetch effect after a change.
+  const [reloadToken, setReloadToken] = useState(0)
+  const fetchKeys = () => setReloadToken(t => t + 1)
 
-  useEffect(() => { fetchKeys() }, [fetchKeys])
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/projects/${projectId}/secrets`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (cancelled) return
+        if (data) setKeys(data.keys ?? [])
+        setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [projectId, reloadToken])
 
   async function addSecret(e: React.FormEvent) {
     e.preventDefault()

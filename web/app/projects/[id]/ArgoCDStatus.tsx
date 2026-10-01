@@ -43,9 +43,12 @@ export default function ArgoCDStatus({
   }, [projectId])
 
   useEffect(() => {
-    fetchStatus()
+    const first = setTimeout(fetchStatus, 0)
     const id = setInterval(fetchStatus, 15000)
-    return () => clearInterval(id)
+    return () => {
+      clearTimeout(first)
+      clearInterval(id)
+    }
   }, [fetchStatus])
 
   async function rollback() {
