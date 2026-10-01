@@ -13,11 +13,38 @@ import (
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
 )
 
+type deploymentStore interface {
+	Create(ctx context.Context, d *model.Deployment) error
+	FindByID(ctx context.Context, id string) (*model.Deployment, error)
+	FindByProject(ctx context.Context, projectID string) ([]model.Deployment, error)
+	FindActive(ctx context.Context) ([]model.Deployment, error)
+	UpdateStatus(ctx context.Context, id string, status model.DeploymentStatus) error
+	SetWorkflowRunID(ctx context.Context, id string, runID int64) error
+	SetImage(ctx context.Context, id, image string) error
+}
+
+type projectFinder interface {
+	FindByID(ctx context.Context, id string) (*model.Project, error)
+}
+
+type workflowAPI interface {
+	Owner() string
+	TriggerWorkflow(ctx context.Context, slug, branch string) error
+	FindDispatchedRun(ctx context.Context, slug, branch string, since time.Time) (*gh.WorkflowRun, error)
+	GetWorkflowRun(ctx context.Context, slug string, runID int64) (*gh.WorkflowRun, error)
+	GetFileContent(ctx context.Context, slug, path string) (string, error)
+	UpdateFile(ctx context.Context, slug, path, content, message string) error
+}
+
+type appStatusAPI interface {
+	GetAppStatus(ctx context.Context, appName string) (*argocd.AppStatus, error)
+}
+
 type DeploymentService struct {
-	deployRepo  *repository.DeploymentRepository
-	projectRepo *repository.ProjectRepository
-	github      *gh.Client
-	argocd      *argocd.Client
+	deployRepo  deploymentStore
+	projectRepo projectFinder
+	github      workflowAPI  // nil when GitHub is not configured
+	argocd      appStatusAPI // nil when ArgoCD is not configured
 }
 
 func NewDeploymentService(
@@ -26,12 +53,16 @@ func NewDeploymentService(
 	github *gh.Client,
 	argocd *argocd.Client,
 ) *DeploymentService {
-	return &DeploymentService{
-		deployRepo:  deployRepo,
-		projectRepo: projectRepo,
-		github:      github,
-		argocd:      argocd,
+	s := &DeploymentService{deployRepo: deployRepo, projectRepo: projectRepo}
+	// Assign only non-nil pointers so the interface fields stay nil when an
+	// integration is disabled.
+	if github != nil {
+		s.github = github
 	}
+	if argocd != nil {
+		s.argocd = argocd
+	}
+	return s
 }
 
 // DeployBranch is the only branch that CI promotes into helm/values.yaml,
