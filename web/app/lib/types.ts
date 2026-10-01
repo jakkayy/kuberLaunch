@@ -22,6 +22,8 @@ export interface Project {
   grafana_url?: string
   status: ProjectStatus
   my_role?: Role
+  template_version: number
+  latest_template_version?: number
   created_at: string
   updated_at: string
 }

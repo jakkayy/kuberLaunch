@@ -14,6 +14,13 @@ import (
 //go:embed all:templates
 var templateFS embed.FS
 
+// TemplateVersion identifies the generated file set. Bump it whenever a
+// template change should be offered to existing projects as an upgrade PR.
+//
+//	1: initial templates
+//	2: per-project Vault SecretStore, ArgoCD AppProject, CI concurrency
+const TemplateVersion = 2
+
 // Settings are platform-wide values rendered into every project.
 type Settings struct {
 	Owner string // GitHub owner of generated repos; "org" when empty

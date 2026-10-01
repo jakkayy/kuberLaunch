@@ -14,6 +14,7 @@ import PodLogs from './PodLogs'
 import MembersPanel from './MembersPanel'
 import AuditLog from './AuditLog'
 import DeleteProject from './DeleteProject'
+import TemplateUpgrade from './TemplateUpgrade'
 import { roleAtLeast } from '@/app/lib/types'
 
 const RUNTIME_LABEL: Record<string, string> = {
@@ -114,6 +115,14 @@ export default async function ProjectPage({
             {project.repo_url.replace('https://github.com/', '')}
           </a>
         </div>
+      )}
+
+      {canMaintain && project.latest_template_version && (
+        <TemplateUpgrade
+          projectId={id}
+          current={project.template_version}
+          latest={project.latest_template_version}
+        />
       )}
 
       <ArgoCDStatus projectId={id} argocdApp={project.argocd_app ?? ''} canRollback={canOwn} />

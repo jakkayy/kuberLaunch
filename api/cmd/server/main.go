@@ -166,6 +166,7 @@ func main() {
 		// maintainer: day-to-day operations
 		projects.POST("/:id/repo", maintainer, repoHandler.Connect)
 		projects.POST("/:id/repo/repair", maintainer, repoHandler.Repair)
+		projects.POST("/:id/templates/upgrade", maintainer, repoHandler.UpgradeTemplates)
 		projects.POST("/:id/argocd", maintainer, argocdHandler.Register)
 		projects.POST("/:id/monitoring", maintainer, monitoringHandler.Setup)
 		projects.POST("/:id/setup", maintainer, setupHandler.Start)

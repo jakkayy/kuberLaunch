@@ -18,21 +18,21 @@ func NewProjectRepository(db *sql.DB) *ProjectRepository {
 
 func (r *ProjectRepository) Create(ctx context.Context, p *model.Project) error {
 	query := `
-		INSERT INTO projects (name, slug, runtime, database, cache, status)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO projects (name, slug, runtime, database, cache, status, template_version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, created_at, updated_at`
 	return r.db.QueryRowContext(ctx, query,
-		p.Name, p.Slug, p.Runtime, p.Database, p.Cache, p.Status,
+		p.Name, p.Slug, p.Runtime, p.Database, p.Cache, p.Status, p.TemplateVersion,
 	).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 }
 
 func (r *ProjectRepository) FindByID(ctx context.Context, id string) (*model.Project, error) {
 	var p model.Project
-	query := `SELECT id, name, slug, runtime, database, cache, repo_url, argocd_app, grafana_url, status, created_at, updated_at
+	query := `SELECT id, name, slug, runtime, database, cache, repo_url, argocd_app, grafana_url, status, template_version, created_at, updated_at
 	          FROM projects WHERE id = $1 AND deleted_at IS NULL`
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&p.ID, &p.Name, &p.Slug, &p.Runtime, &p.Database,
-		&p.Cache, &p.RepoURL, &p.ArgocdApp, &p.GrafanaURL, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+		&p.Cache, &p.RepoURL, &p.ArgocdApp, &p.GrafanaURL, &p.Status, &p.TemplateVersion, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -51,11 +51,11 @@ func (r *ProjectRepository) FindByArgoApp(ctx context.Context, app string) (*mod
 // findOne looks up a live project by a unique column; column is never user input.
 func (r *ProjectRepository) findOne(ctx context.Context, column, value string) (*model.Project, error) {
 	var p model.Project
-	query := `SELECT id, name, slug, runtime, database, cache, repo_url, argocd_app, grafana_url, status, created_at, updated_at
+	query := `SELECT id, name, slug, runtime, database, cache, repo_url, argocd_app, grafana_url, status, template_version, created_at, updated_at
 	          FROM projects WHERE ` + column + ` = $1 AND deleted_at IS NULL`
 	err := r.db.QueryRowContext(ctx, query, value).Scan(
 		&p.ID, &p.Name, &p.Slug, &p.Runtime, &p.Database,
-		&p.Cache, &p.RepoURL, &p.ArgocdApp, &p.GrafanaURL, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+		&p.Cache, &p.RepoURL, &p.ArgocdApp, &p.GrafanaURL, &p.Status, &p.TemplateVersion, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -64,7 +64,7 @@ func (r *ProjectRepository) findOne(ctx context.Context, column, value string) (
 }
 
 func (r *ProjectRepository) FindAll(ctx context.Context) ([]model.Project, error) {
-	query := `SELECT id, name, slug, runtime, database, cache, repo_url, argocd_app, grafana_url, status, created_at, updated_at
+	query := `SELECT id, name, slug, runtime, database, cache, repo_url, argocd_app, grafana_url, status, template_version, created_at, updated_at
 	          FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC`
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
@@ -77,7 +77,7 @@ func (r *ProjectRepository) FindAll(ctx context.Context) ([]model.Project, error
 		var p model.Project
 		if err := rows.Scan(
 			&p.ID, &p.Name, &p.Slug, &p.Runtime, &p.Database,
-			&p.Cache, &p.RepoURL, &p.ArgocdApp, &p.GrafanaURL, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+			&p.Cache, &p.RepoURL, &p.ArgocdApp, &p.GrafanaURL, &p.Status, &p.TemplateVersion, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -90,6 +90,12 @@ func (r *ProjectRepository) SetRepoURL(ctx context.Context, id, repoURL string) 
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE projects SET repo_url = $1, updated_at = NOW() WHERE id = $2`,
 		repoURL, id)
+	return err
+}
+
+func (r *ProjectRepository) SetTemplateVersion(ctx context.Context, id string, version int) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE projects SET template_version = $1, updated_at = NOW() WHERE id = $2`, version, id)
 	return err
 }
 

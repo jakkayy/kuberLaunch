@@ -260,6 +260,59 @@ func (c *Client) EnsureWebhook(ctx context.Context, slug, url, secret string) er
 	return nil
 }
 
+// PullRequest is the state of a pull request opened by kuberLaunch.
+type PullRequest struct {
+	URL    string
+	State  string // open | closed
+	Merged bool
+}
+
+// FindPullRequest returns the most recent pull request from head branch, or nil.
+func (c *Client) FindPullRequest(ctx context.Context, slug, head string) (*PullRequest, error) {
+	prs, _, err := c.gh.PullRequests.List(ctx, c.owner, slug, &gh.PullRequestListOptions{
+		Head:        c.owner + ":" + head,
+		State:       "all",
+		ListOptions: gh.ListOptions{PerPage: 1},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(prs) == 0 {
+		return nil, nil
+	}
+	pr := prs[0]
+	return &PullRequest{URL: pr.GetHTMLURL(), State: pr.GetState(), Merged: !pr.GetMergedAt().IsZero()}, nil
+}
+
+// OpenPullRequest commits files onto a new branch cut from main and opens a
+// pull request into main. The branch is reset if it already exists.
+func (c *Client) OpenPullRequest(ctx context.Context, slug, branch, title, body string, files []generator.GeneratedFile) (*PullRequest, error) {
+	main, _, err := c.gh.Git.GetRef(ctx, c.owner, slug, "refs/heads/main")
+	if err != nil {
+		return nil, fmt.Errorf("get main: %w", err)
+	}
+	sha, err := c.commitFiles(ctx, slug, main.Object.GetSHA(), files, title)
+	if err != nil {
+		return nil, err
+	}
+	ref := &gh.Reference{Ref: gh.String("refs/heads/" + branch), Object: &gh.GitObject{SHA: gh.String(sha)}}
+	if _, _, err := c.gh.Git.CreateRef(ctx, c.owner, slug, ref); err != nil {
+		if _, _, err := c.gh.Git.UpdateRef(ctx, c.owner, slug, ref, true); err != nil {
+			return nil, fmt.Errorf("create branch %s: %w", branch, err)
+		}
+	}
+	pr, _, err := c.gh.PullRequests.Create(ctx, c.owner, slug, &gh.NewPullRequest{
+		Title: gh.String(title),
+		Head:  gh.String(branch),
+		Base:  gh.String("main"),
+		Body:  gh.String(body),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create pull request: %w", err)
+	}
+	return &PullRequest{URL: pr.GetHTMLURL(), State: pr.GetState()}, nil
+}
+
 // ArchiveRepo makes a repository read-only while keeping its code and history.
 func (c *Client) ArchiveRepo(ctx context.Context, slug string) error {
 	_, _, err := c.gh.Repositories.Edit(ctx, c.owner, slug, &gh.Repository{Archived: gh.Bool(true)})

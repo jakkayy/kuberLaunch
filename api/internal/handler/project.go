@@ -80,6 +80,7 @@ func (h *ProjectHandler) GetByID(c *gin.Context) {
 		return
 	}
 	p.MyRole = projectRole(c)
+	p.LatestTemplateVersion = generator.TemplateVersion
 	c.JSON(http.StatusOK, p)
 }
 

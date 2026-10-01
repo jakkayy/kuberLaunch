@@ -40,3 +40,14 @@ func (h *RepoHandler) Repair(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Files re-pushed successfully"})
 }
+
+// UpgradeTemplates opens (or reports) the template upgrade pull request.
+// POST /api/v1/projects/:id/templates/upgrade
+func (h *RepoHandler) UpgradeTemplates(c *gin.Context) {
+	up, err := h.svc.UpgradeTemplates(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, up)
+}
