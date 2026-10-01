@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -45,8 +47,21 @@ type VaultConfig struct {
 }
 
 type GitHubConfig struct {
-	Token string
 	Owner string
+	// OwnerIsOrg creates repos under the Owner organization (PAT mode).
+	OwnerIsOrg bool
+
+	// Personal access token mode.
+	Token string
+
+	// GitHub App mode (preferred). Used when AppID is set.
+	AppID          int64
+	InstallationID int64
+	PrivateKey     []byte
+}
+
+func (g GitHubConfig) Enabled() bool {
+	return g.Owner != "" && (g.Token != "" || g.AppID != 0)
 }
 
 type DBConfig struct {
@@ -80,8 +95,12 @@ func Load() *Config {
 			Name:     getEnv("DB_NAME", "kuberlauncher"),
 		},
 		GitHub: GitHubConfig{
-			Token: getEnv("GITHUB_TOKEN", ""),
-			Owner: getEnv("GITHUB_OWNER", ""),
+			Owner:          getEnv("GITHUB_OWNER", ""),
+			OwnerIsOrg:     getEnv("GITHUB_OWNER_IS_ORG", "false") == "true",
+			Token:          getEnv("GITHUB_TOKEN", ""),
+			AppID:          getInt("GITHUB_APP_ID"),
+			InstallationID: getInt("GITHUB_APP_INSTALLATION_ID"),
+			PrivateKey:     getFileOrEnv("GITHUB_APP_PRIVATE_KEY_PATH", "GITHUB_APP_PRIVATE_KEY"),
 		},
 		ArgoCD: ArgoCDConfig{
 			URL:      getEnv("ARGOCD_URL", "http://argocd.localhost:8090"),
@@ -99,6 +118,23 @@ func Load() *Config {
 			Token: getEnv("VAULT_TOKEN", "root"),
 		},
 	}
+}
+
+func getInt(key string) int64 {
+	n, _ := strconv.ParseInt(os.Getenv(key), 10, 64)
+	return n
+}
+
+// getFileOrEnv reads the file at env pathKey if set, else the value of valueKey.
+func getFileOrEnv(pathKey, valueKey string) []byte {
+	if path := os.Getenv(pathKey); path != "" {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			log.Fatalf("read %s: %v", pathKey, err)
+		}
+		return b
+	}
+	return []byte(os.Getenv(valueKey))
 }
 
 func getEnv(key, fallback string) string {

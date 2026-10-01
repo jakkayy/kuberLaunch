@@ -39,9 +39,17 @@ func main() {
 	}
 
 	var githubClient *gh.Client
-	if cfg.GitHub.Token != "" && cfg.GitHub.Owner != "" {
-		githubClient = gh.New(cfg.GitHub.Token, cfg.GitHub.Owner)
-		log.Printf("GitHub integration enabled (owner: %s)", cfg.GitHub.Owner)
+	switch {
+	case !cfg.GitHub.Enabled():
+	case cfg.GitHub.AppID != 0:
+		githubClient, err = gh.NewApp(cfg.GitHub.AppID, cfg.GitHub.InstallationID, cfg.GitHub.PrivateKey, cfg.GitHub.Owner)
+		if err != nil {
+			log.Fatalf("github app: %v", err)
+		}
+		log.Printf("GitHub integration enabled via GitHub App %d (owner: %s)", cfg.GitHub.AppID, cfg.GitHub.Owner)
+	default:
+		githubClient = gh.New(cfg.GitHub.Token, cfg.GitHub.Owner, cfg.GitHub.OwnerIsOrg)
+		log.Printf("WARNING: GitHub integration uses a personal access token; prefer a GitHub App (owner: %s)", cfg.GitHub.Owner)
 	}
 
 	var argocdClient *argocd.Client
