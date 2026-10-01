@@ -53,8 +53,11 @@ func main() {
 	}
 
 	var argocdClient *argocd.Client
-	if cfg.ArgoCD.Password != "" {
-		argocdClient = argocd.New(cfg.ArgoCD.URL, cfg.ArgoCD.Username, cfg.ArgoCD.Password)
+	if cfg.ArgoCD.Enabled() {
+		argocdClient = argocd.New(cfg.ArgoCD.URL, cfg.ArgoCD.Token, cfg.ArgoCD.Username, cfg.ArgoCD.Password)
+		if cfg.ArgoCD.Token == "" {
+			log.Printf("WARNING: ArgoCD integration logs in with a password; prefer ARGOCD_TOKEN for a dedicated account")
+		}
 		log.Printf("ArgoCD integration enabled (%s)", cfg.ArgoCD.URL)
 	}
 

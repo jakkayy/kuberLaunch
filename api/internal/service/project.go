@@ -178,7 +178,7 @@ func (s *ProjectService) RegisterArgoCD(ctx context.Context, id string) (string,
 	}
 
 	if s.argocd == nil {
-		return "", fmt.Errorf("ArgoCD integration not configured (ARGOCD_PASSWORD missing)")
+		return "", fmt.Errorf("ArgoCD integration not configured (ARGOCD_TOKEN missing)")
 	}
 
 	appName, err := s.argocd.RegisterApp(ctx, p.Slug, p.RepoURL)

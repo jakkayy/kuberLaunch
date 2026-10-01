@@ -12,18 +12,31 @@ import (
 
 type Client struct {
 	baseURL  string
+	apiToken string // account API token; preferred over username/password
 	username string
 	password string
 	http     *http.Client
 }
 
-func New(url, username, password string) *Client {
+// New creates an ArgoCD client. When apiToken is set it is used as-is
+// (see k8s/platform/argocd-account.yaml for a least-privilege account);
+// otherwise the client logs in with username/password.
+func New(url, apiToken, username, password string) *Client {
 	return &Client{
 		baseURL:  url,
+		apiToken: apiToken,
 		username: username,
 		password: password,
 		http:     &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+// token returns the bearer token for API calls.
+func (c *Client) token(ctx context.Context) (string, error) {
+	if c.apiToken != "" {
+		return c.apiToken, nil
+	}
+	return c.login(ctx)
 }
 
 func (c *Client) login(ctx context.Context) (string, error) {
@@ -61,7 +74,7 @@ func (c *Client) login(ctx context.Context) (string, error) {
 // RegisterApp creates (or upserts) an ArgoCD Application for the given project.
 // Returns the application name.
 func (c *Client) RegisterApp(ctx context.Context, slug, repoURL string) (string, error) {
-	token, err := c.login(ctx)
+	token, err := c.token(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -122,7 +135,7 @@ func (c *Client) RegisterApp(ctx context.Context, slug, repoURL string) (string,
 
 // DeleteApp removes an ArgoCD Application (cascade deletes all resources).
 func (c *Client) DeleteApp(ctx context.Context, appName string) error {
-	token, err := c.login(ctx)
+	token, err := c.token(ctx)
 	if err != nil {
 		return err
 	}
@@ -180,7 +193,7 @@ func (c *Client) disableAutoSync(ctx context.Context, appName, token string) err
 
 // RollbackApp disables auto-sync then triggers a rollback to the previous revision.
 func (c *Client) RollbackApp(ctx context.Context, appName string) error {
-	token, err := c.login(ctx)
+	token, err := c.token(ctx)
 	if err != nil {
 		return err
 	}
@@ -222,7 +235,7 @@ type AppStatus struct {
 
 // GetAppStatus returns the current health and sync status of an ArgoCD app.
 func (c *Client) GetAppStatus(ctx context.Context, appName string) (*AppStatus, error) {
-	token, err := c.login(ctx)
+	token, err := c.token(ctx)
 	if err != nil {
 		return nil, err
 	}

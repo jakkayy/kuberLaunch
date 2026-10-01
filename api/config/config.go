@@ -30,9 +30,12 @@ type AuthConfig struct {
 
 type ArgoCDConfig struct {
 	URL      string
+	Token    string // API token of a dedicated ArgoCD account (preferred)
 	Username string
 	Password string
 }
+
+func (a ArgoCDConfig) Enabled() bool { return a.Token != "" || a.Password != "" }
 
 type GrafanaConfig struct {
 	URL       string
@@ -104,6 +107,7 @@ func Load() *Config {
 		},
 		ArgoCD: ArgoCDConfig{
 			URL:      getEnv("ARGOCD_URL", "http://argocd.localhost:8090"),
+			Token:    getEnv("ARGOCD_TOKEN", ""),
 			Username: getEnv("ARGOCD_USERNAME", "admin"),
 			Password: getEnv("ARGOCD_PASSWORD", ""),
 		},
