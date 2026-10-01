@@ -15,7 +15,6 @@ const (
 
 	DatabasePostgres Database = "postgres"
 	DatabaseMySQL    Database = "mysql"
-	DatabaseMongoDB  Database = "mongodb"
 	DatabaseNone     Database = "none"
 
 	CacheRedis Cache = "redis"
@@ -44,6 +43,6 @@ type Project struct {
 type CreateProjectRequest struct {
 	Name     string   `json:"name" binding:"required,min=2,max=50"`
 	Runtime  Runtime  `json:"runtime" binding:"required,oneof=nextjs nestjs go fastapi"`
-	Database Database `json:"database" binding:"required,oneof=postgres mysql mongodb none"`
+	Database Database `json:"database" binding:"required,oneof=postgres mysql none"`
 	Cache    Cache    `json:"cache" binding:"required,oneof=redis none"`
 }

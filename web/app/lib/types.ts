@@ -1,5 +1,5 @@
 export type Runtime = 'nextjs' | 'nestjs' | 'go' | 'fastapi'
-export type Database = 'postgres' | 'mysql' | 'mongodb' | 'none'
+export type Database = 'postgres' | 'mysql' | 'none'
 export type Cache = 'redis' | 'none'
 export type ProjectStatus = 'creating' | 'ready' | 'failed'
 

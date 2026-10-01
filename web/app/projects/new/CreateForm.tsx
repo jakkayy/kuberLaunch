@@ -74,7 +74,6 @@ export default function CreateForm() {
           >
             <option value="postgres">PostgreSQL</option>
             <option value="mysql">MySQL</option>
-            <option value="mongodb">MongoDB</option>
             <option value="none">None</option>
           </select>
         </div>
