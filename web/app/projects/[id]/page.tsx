@@ -13,6 +13,7 @@ import ArgoCDStatus from './ArgoCDStatus'
 import PodLogs from './PodLogs'
 import MembersPanel from './MembersPanel'
 import AuditLog from './AuditLog'
+import DeleteProject from './DeleteProject'
 import { roleAtLeast } from '@/app/lib/types'
 
 const RUNTIME_LABEL: Record<string, string> = {
@@ -141,6 +142,8 @@ export default async function ProjectPage({
       <MembersPanel projectId={id} canManage={canOwn} />
 
       {canMaintain && <AuditLog projectId={id} />}
+
+      {canOwn && <DeleteProject projectId={id} slug={project.slug} />}
 
       {/* Generated files */}
       {files.length > 0 ? (

@@ -266,3 +266,13 @@ func TestTrigger(t *testing.T) {
 		}
 	})
 }
+
+func TestPollStatusFailsWhenProjectDeleted(t *testing.T) {
+	d := deployment(model.DeploymentStatusBuilding)
+	d.ProjectID = "gone"
+	store := newFakeDeployStore(d)
+	got, err := newTestService(store, &fakeGitHub{}, nil).PollStatus(context.Background(), "d1")
+	if err != nil || got != model.DeploymentStatusFailed || store.byID["d1"].Status != model.DeploymentStatusFailed {
+		t.Fatalf("status = %s (stored %s), err %v", got, store.byID["d1"].Status, err)
+	}
+}

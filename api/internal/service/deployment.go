@@ -169,8 +169,13 @@ func (s *DeploymentService) PollStatus(ctx context.Context, deployID string) (mo
 		return d.Status, nil
 	}
 	p, err := s.projectRepo.FindByID(ctx, d.ProjectID)
-	if err != nil || p == nil {
-		return d.Status, fmt.Errorf("project not found")
+	if err != nil {
+		return d.Status, err
+	}
+	if p == nil {
+		// Project was deleted mid-deployment; nothing left to roll out.
+		_ = s.deployRepo.UpdateStatus(ctx, deployID, model.DeploymentStatusFailed)
+		return model.DeploymentStatusFailed, nil
 	}
 
 	// Phase 1: poll the GitHub Actions run that this deployment dispatched

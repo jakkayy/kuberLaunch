@@ -92,7 +92,10 @@ func (s *ProjectService) GetByID(ctx context.Context, id string) (*model.Project
 	return p, nil
 }
 
-func (s *ProjectService) Delete(ctx context.Context, id string) error {
+// Delete tears down a project's running resources and hides it. confirm must
+// equal the project slug. The GitHub repo is archived (not deleted) and the
+// database row is soft-deleted, so code, history and audit trail are kept.
+func (s *ProjectService) Delete(ctx context.Context, id, confirm string) error {
 	p, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return err
@@ -100,7 +103,11 @@ func (s *ProjectService) Delete(ctx context.Context, id string) error {
 	if p == nil {
 		return fmt.Errorf("project not found")
 	}
+	if confirm != p.Slug {
+		return fmt.Errorf("%w: type the project slug %q to confirm deletion", ErrInvalid, p.Slug)
+	}
 
+	// Stop workloads first: deleting the app cascades to its Kubernetes resources.
 	if s.argocd != nil && p.ArgocdApp != "" {
 		if err := s.argocd.DeleteApp(ctx, p.ArgocdApp); err != nil {
 			return fmt.Errorf("delete ArgoCD app: %w", err)
@@ -110,19 +117,19 @@ func (s *ProjectService) Delete(ctx context.Context, id string) error {
 		}
 	}
 
-	if s.github != nil && p.RepoURL != "" {
-		if err := s.github.DeleteRepo(ctx, p.Slug); err != nil {
-			return fmt.Errorf("delete GitHub repo: %w", err)
-		}
-	}
-
 	if s.vault != nil {
 		if err := s.vault.DeleteProjectAccess(ctx, s.gen.VaultAuthMount, p.Slug); err != nil {
 			return fmt.Errorf("delete Vault access: %w", err)
 		}
 	}
 
-	return s.repo.Delete(ctx, id)
+	if s.github != nil && p.RepoURL != "" {
+		if err := s.github.ArchiveRepo(ctx, p.Slug); err != nil {
+			return fmt.Errorf("archive GitHub repo: %w", err)
+		}
+	}
+
+	return s.repo.SoftDelete(ctx, id)
 }
 
 func (s *ProjectService) Preview(ctx context.Context, id string) ([]generator.GeneratedFile, error) {

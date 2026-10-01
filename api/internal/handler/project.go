@@ -83,9 +83,14 @@ func (h *ProjectHandler) GetByID(c *gin.Context) {
 	c.JSON(http.StatusOK, p)
 }
 
+// Delete requires {"confirm": "<slug>"} in the body.
 func (h *ProjectHandler) Delete(c *gin.Context) {
-	if err := h.svc.Delete(c.Request.Context(), c.Param("id")); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+	var req struct {
+		Confirm string `json:"confirm"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	if err := h.svc.Delete(c.Request.Context(), c.Param("id"), req.Confirm); err != nil {
+		respondError(c, err)
 		return
 	}
 	c.Status(http.StatusNoContent)

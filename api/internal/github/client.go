@@ -224,9 +224,9 @@ func (c *Client) GetFileContent(ctx context.Context, slug, path string) (string,
 	return content, nil
 }
 
-// DeleteRepo deletes a GitHub repository.
-func (c *Client) DeleteRepo(ctx context.Context, slug string) error {
-	_, err := c.gh.Repositories.Delete(ctx, c.owner, slug)
+// ArchiveRepo makes a repository read-only while keeping its code and history.
+func (c *Client) ArchiveRepo(ctx context.Context, slug string) error {
+	_, _, err := c.gh.Repositories.Edit(ctx, c.owner, slug, &gh.Repository{Archived: gh.Bool(true)})
 	return err
 }
 

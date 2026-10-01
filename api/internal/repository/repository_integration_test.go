@@ -87,6 +87,29 @@ func TestRepositories(t *testing.T) {
 		}
 	})
 
+	t.Run("soft delete hides project but keeps slug taken", func(t *testing.T) {
+		q := &model.Project{Name: "Gone", Slug: "gone", Runtime: model.RuntimeGo,
+			Database: model.DatabaseNone, Cache: model.CacheNone, Status: model.ProjectStatusReady}
+		if err := projects.Create(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+		if err := projects.SoftDelete(ctx, q.ID); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := projects.FindByID(ctx, q.ID); got != nil {
+			t.Fatalf("soft-deleted project still found: %+v", got)
+		}
+		all, _ := projects.FindAll(ctx)
+		for _, p := range all {
+			if p.ID == q.ID {
+				t.Fatal("soft-deleted project listed")
+			}
+		}
+		if exists, _ := projects.SlugExists(ctx, "gone"); !exists {
+			t.Fatal("slug of soft-deleted project should stay taken")
+		}
+	})
+
 	t.Run("delete cascades deployments", func(t *testing.T) {
 		if err := projects.Delete(ctx, p.ID); err != nil {
 			t.Fatal(err)
