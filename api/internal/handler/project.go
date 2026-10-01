@@ -5,17 +5,19 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jakkayy/kuberlauncher/api/internal/auth"
 	"github.com/jakkayy/kuberlauncher/api/internal/generator"
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
 	"github.com/jakkayy/kuberlauncher/api/internal/service"
 )
 
 type ProjectHandler struct {
-	svc *service.ProjectService
+	svc    *service.ProjectService
+	access *service.AccessService
 }
 
-func NewProjectHandler(svc *service.ProjectService) *ProjectHandler {
-	return &ProjectHandler{svc: svc}
+func NewProjectHandler(svc *service.ProjectService, access *service.AccessService) *ProjectHandler {
+	return &ProjectHandler{svc: svc, access: access}
 }
 
 func (h *ProjectHandler) Create(c *gin.Context) {
@@ -30,6 +32,11 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	if err := h.access.GrantOwner(c.Request.Context(), p.ID, auth.UserFrom(c)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "grant owner: " + err.Error()})
+		return
+	}
+	p.MyRole = model.RoleOwner
 
 	filePaths := make([]string, len(files))
 	for i, f := range files {
@@ -45,13 +52,22 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 }
 
 func (h *ProjectHandler) List(c *gin.Context) {
-	projects, err := h.svc.List(c.Request.Context())
+	ctx := c.Request.Context()
+	all, err := h.svc.List(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if projects == nil {
-		projects = []model.Project{}
+	visible, isAdmin, err := h.access.VisibleProjects(ctx, auth.UserFrom(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	projects := []model.Project{}
+	for _, p := range all {
+		if isAdmin || visible[p.ID] {
+			projects = append(projects, p)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"projects": projects})
 }
@@ -62,6 +78,7 @@ func (h *ProjectHandler) GetByID(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
+	p.MyRole = projectRole(c)
 	c.JSON(http.StatusOK, p)
 }
 

@@ -25,6 +25,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </Link>
           {user && (
             <div className="flex items-center gap-3">
+              <Link href="/teams" className="text-sm text-zinc-300 hover:text-white transition-colors">
+                Teams
+              </Link>
               <Link
                 href="/projects/new"
                 className="bg-white text-zinc-900 text-sm font-medium px-3 py-1.5 rounded hover:bg-zinc-100 transition-colors"

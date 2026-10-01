@@ -18,6 +18,8 @@ func respondError(c *gin.Context, err error) {
 		status = http.StatusBadRequest
 	case errors.Is(err, service.ErrConflict):
 		status = http.StatusConflict
+	case errors.Is(err, service.ErrForbidden):
+		status = http.StatusForbidden
 	}
 	c.JSON(status, gin.H{"error": err.Error()})
 }

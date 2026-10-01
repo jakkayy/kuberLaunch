@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -21,6 +22,8 @@ type Config struct {
 type AuthConfig struct {
 	// JWTSecret verifies session tokens signed by the web app (shared secret).
 	JWTSecret string
+	// Admins are GitHub logins with owner access to every project and team.
+	Admins []string
 }
 
 type ArgoCDConfig struct {
@@ -67,6 +70,7 @@ func Load() *Config {
 		Env:  getEnv("ENV", "development"),
 		Auth: AuthConfig{
 			JWTSecret: getEnv("AUTH_JWT_SECRET", ""),
+			Admins:    strings.Split(getEnv("PLATFORM_ADMINS", ""), ","),
 		},
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "localhost"),

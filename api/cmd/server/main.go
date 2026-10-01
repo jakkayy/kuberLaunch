@@ -19,6 +19,7 @@ import (
 	"github.com/jakkayy/kuberlauncher/api/internal/grafana"
 	"github.com/jakkayy/kuberlauncher/api/internal/handler"
 	"github.com/jakkayy/kuberlauncher/api/internal/kube"
+	"github.com/jakkayy/kuberlauncher/api/internal/model"
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
 	"github.com/jakkayy/kuberlauncher/api/internal/service"
 	"github.com/jakkayy/kuberlauncher/api/internal/vault"
@@ -73,12 +74,15 @@ func main() {
 		log.Fatalf("auth: %v", err)
 	}
 
+	accessSvc := service.NewAccessService(repository.NewAccessRepository(database), userRepo, cfg.Auth.Admins)
+	accessHandler := handler.NewAccessHandler(accessSvc)
+
 	projectRepo := repository.NewProjectRepository(database)
 	deployRepo := repository.NewDeploymentRepository(database)
 	projectSvc := service.NewProjectService(projectRepo, githubClient, argocdClient, grafanaClient)
 	deploymentSvc := service.NewDeploymentService(deployRepo, projectRepo, githubClient, argocdClient)
 	secretSvc := service.NewSecretService(projectRepo, vaultClient)
-	projectHandler := handler.NewProjectHandler(projectSvc)
+	projectHandler := handler.NewProjectHandler(projectSvc, accessSvc)
 	repoHandler := handler.NewRepoHandler(projectSvc)
 	argocdHandler := handler.NewArgoCDHandler(projectSvc)
 	monitoringHandler := handler.NewMonitoringHandler(projectSvc)
@@ -96,32 +100,52 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	viewer := accessHandler.RequireProjectRole(model.RoleViewer)
+	maintainer := accessHandler.RequireProjectRole(model.RoleMaintainer)
+	owner := accessHandler.RequireProjectRole(model.RoleOwner)
+
 	v1 := r.Group("/api/v1", authn.Middleware())
 	{
-		v1.GET("/me", func(c *gin.Context) { c.JSON(http.StatusOK, auth.UserFrom(c)) })
+		v1.GET("/me", accessHandler.Me)
+
+		teams := v1.Group("/teams")
+		teams.GET("", accessHandler.ListTeams)
+		teams.POST("", accessHandler.CreateTeam)
+		teams.GET("/:team/members", accessHandler.ListTeamMembers)
+		teams.PUT("/:team/members", accessHandler.AddTeamMember)
+		teams.DELETE("/:team/members/:login", accessHandler.RemoveTeamMember)
 
 		projects := v1.Group("/projects")
 		projects.POST("", projectHandler.Create)
 		projects.GET("", projectHandler.List)
-		projects.GET("/:id", projectHandler.GetByID)
-		projects.DELETE("/:id", projectHandler.Delete)
-		projects.GET("/:id/download", projectHandler.Download)
-		projects.GET("/:id/preview", projectHandler.Preview)
-		projects.POST("/:id/repo", repoHandler.Connect)
-		projects.POST("/:id/repo/repair", repoHandler.Repair)
-		projects.POST("/:id/argocd", argocdHandler.Register)
-		projects.GET("/:id/argocd/status", argocdHandler.Status)
-		projects.POST("/:id/argocd/rollback", argocdHandler.Rollback)
-		projects.POST("/:id/monitoring", monitoringHandler.Setup)
-		projects.GET("/:id/setup/stream", setupHandler.Stream)
-		projects.POST("/:id/deployments", deploymentHandler.Trigger)
-		projects.GET("/:id/deployments", deploymentHandler.List)
-		projects.GET("/:id/deployments/:dep_id", deploymentHandler.Get)
-		projects.GET("/:id/deployments/:dep_id/stream", deploymentHandler.Stream)
-		projects.POST("/:id/secrets", secretHandler.Set)
-		projects.GET("/:id/secrets", secretHandler.ListKeys)
-		projects.DELETE("/:id/secrets/:key", secretHandler.Delete)
-		projects.GET("/:id/logs", logsHandler.Stream)
+
+		// viewer: read-only access
+		projects.GET("/:id", viewer, projectHandler.GetByID)
+		projects.GET("/:id/download", viewer, projectHandler.Download)
+		projects.GET("/:id/preview", viewer, projectHandler.Preview)
+		projects.GET("/:id/argocd/status", viewer, argocdHandler.Status)
+		projects.GET("/:id/deployments", viewer, deploymentHandler.List)
+		projects.GET("/:id/deployments/:dep_id", viewer, deploymentHandler.Get)
+		projects.GET("/:id/deployments/:dep_id/stream", viewer, deploymentHandler.Stream)
+		projects.GET("/:id/secrets", viewer, secretHandler.ListKeys)
+		projects.GET("/:id/members", viewer, accessHandler.ListMembers)
+
+		// maintainer: day-to-day operations
+		projects.POST("/:id/repo", maintainer, repoHandler.Connect)
+		projects.POST("/:id/repo/repair", maintainer, repoHandler.Repair)
+		projects.POST("/:id/argocd", maintainer, argocdHandler.Register)
+		projects.POST("/:id/monitoring", maintainer, monitoringHandler.Setup)
+		projects.GET("/:id/setup/stream", maintainer, setupHandler.Stream)
+		projects.POST("/:id/deployments", maintainer, deploymentHandler.Trigger)
+		projects.POST("/:id/secrets", maintainer, secretHandler.Set)
+		projects.DELETE("/:id/secrets/:key", maintainer, secretHandler.Delete)
+		projects.GET("/:id/logs", maintainer, logsHandler.Stream)
+
+		// owner: destructive actions and access management
+		projects.DELETE("/:id", owner, projectHandler.Delete)
+		projects.POST("/:id/argocd/rollback", owner, argocdHandler.Rollback)
+		projects.PUT("/:id/members", owner, accessHandler.AddMember)
+		projects.DELETE("/:id/members/:member_id", owner, accessHandler.RemoveMember)
 	}
 
 	watchCtx, stopWatch := context.WithCancel(context.Background())

@@ -25,9 +25,11 @@ const SYNC_COLOR: Record<string, string> = {
 export default function ArgoCDStatus({
   projectId,
   argocdApp,
+  canRollback,
 }: {
   projectId: string
   argocdApp: string
+  canRollback: boolean
 }) {
   const [status, setStatus] = useState<Status | null>(null)
   const [rolling, setRolling] = useState(false)
@@ -106,13 +108,15 @@ export default function ArgoCDStatus({
             ↩ Rolled back · auto-sync ปิดอยู่
           </span>
         )}
-        <button
-          onClick={rollback}
-          disabled={rolling}
-          className="text-xs font-medium px-3 py-1 border border-purple-300 text-purple-700 rounded hover:bg-purple-100 disabled:opacity-40 transition-colors"
-        >
-          {rolling ? 'Rolling back…' : 'Rollback'}
-        </button>
+        {canRollback && (
+          <button
+            onClick={rollback}
+            disabled={rolling}
+            className="text-xs font-medium px-3 py-1 border border-purple-300 text-purple-700 rounded hover:bg-purple-100 disabled:opacity-40 transition-colors"
+          >
+            {rolling ? 'Rolling back…' : 'Rollback'}
+          </button>
+        )}
       </div>
     </div>
   )
