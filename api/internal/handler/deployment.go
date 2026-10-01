@@ -30,11 +30,7 @@ func (h *DeploymentHandler) Trigger(c *gin.Context) {
 
 	d, err := h.svc.Trigger(c.Request.Context(), projectID, req.Branch)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if err.Error() == "project not found" {
-			status = http.StatusNotFound
-		}
-		c.JSON(status, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, d)

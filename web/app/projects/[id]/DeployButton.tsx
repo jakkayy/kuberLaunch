@@ -32,7 +32,8 @@ export default function DeployButton({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [liveStatus, setLiveStatus] = useState<DeploymentStatus | null>(null)
-  const [branch, setBranch] = useState('main')
+  // Only main is promoted into helm/values.yaml by CI, so it is the only deployable branch.
+  const branch = 'main'
   const router = useRouter()
 
   async function deploy() {
@@ -78,14 +79,9 @@ export default function DeployButton({
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center gap-2">
-        <input
-          type="text"
-          value={branch}
-          onChange={(e) => setBranch(e.target.value)}
-          disabled={loading}
-          placeholder="branch"
-          className="border border-zinc-300 rounded px-2 py-1.5 text-sm font-mono w-28 focus:outline-none focus:border-zinc-500 disabled:opacity-50"
-        />
+        <span className="border border-zinc-200 bg-zinc-50 rounded px-2 py-1.5 text-sm font-mono text-zinc-600">
+          {branch}
+        </span>
         <button
           onClick={deploy}
           disabled={loading || !hasRepo}

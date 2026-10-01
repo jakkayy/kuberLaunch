@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/jakkayy/kuberlauncher/api/internal/argocd"
@@ -33,6 +34,10 @@ func NewDeploymentService(
 	}
 }
 
+// DeployBranch is the only branch that CI promotes into helm/values.yaml,
+// so it is the only branch whose deployment ArgoCD will actually roll out.
+const DeployBranch = "main"
+
 // Trigger creates a deployment record and dispatches a workflow_dispatch event on GitHub.
 func (s *DeploymentService) Trigger(ctx context.Context, projectID, branch string) (*model.Deployment, error) {
 	p, err := s.projectRepo.FindByID(ctx, projectID)
@@ -44,6 +49,9 @@ func (s *DeploymentService) Trigger(ctx context.Context, projectID, branch strin
 	}
 	if s.github == nil {
 		return nil, fmt.Errorf("GitHub integration not configured")
+	}
+	if branch != DeployBranch {
+		return nil, fmt.Errorf("%w: only the %s branch can be deployed; other branches only build images", ErrInvalid, DeployBranch)
 	}
 
 	d := &model.Deployment{
@@ -145,6 +153,7 @@ func (s *DeploymentService) PollStatus(ctx context.Context, deployID string) (mo
 		}
 		switch run.Conclusion {
 		case "success":
+			_ = s.deployRepo.SetImage(ctx, deployID, expectedImage(s.github.Owner(), p.Slug, run.HeadSHA))
 			_ = s.deployRepo.UpdateStatus(ctx, deployID, model.DeploymentStatusDeploying)
 			return model.DeploymentStatusDeploying, nil
 		case "failure", "cancelled", "timed_out", "startup_failure", "action_required":
@@ -158,7 +167,7 @@ func (s *DeploymentService) PollStatus(ctx context.Context, deployID string) (mo
 	if d.Status == model.DeploymentStatusDeploying && p.ArgocdApp != "" && s.argocd != nil {
 		appStatus, err := s.argocd.GetAppStatus(ctx, p.ArgocdApp)
 		if err == nil {
-			if appStatus.Health == "Healthy" && appStatus.Sync == "Synced" {
+			if appStatus.Health == "Healthy" && appStatus.Sync == "Synced" && runsImage(appStatus.Images, d.Image) {
 				_ = s.deployRepo.UpdateStatus(ctx, deployID, model.DeploymentStatusSuccess)
 				return model.DeploymentStatusSuccess, nil
 			}
@@ -170,6 +179,29 @@ func (s *DeploymentService) PollStatus(ctx context.Context, deployID string) (mo
 	}
 
 	return d.Status, nil
+}
+
+// expectedImage is the image tag the generated CI workflow pushes for a commit.
+func expectedImage(owner, slug, sha string) string {
+	if len(sha) > 7 {
+		sha = sha[:7]
+	}
+	return strings.ToLower(fmt.Sprintf("ghcr.io/%s/%s:sha-%s", owner, slug, sha))
+}
+
+// runsImage reports whether ArgoCD shows the expected image running. A synced
+// and healthy app that still runs the previous tag has not deployed this build.
+// If ArgoCD reports no images (older versions), the check is skipped.
+func runsImage(images []string, expected string) bool {
+	if expected == "" || len(images) == 0 {
+		return true
+	}
+	for _, img := range images {
+		if strings.EqualFold(img, expected) {
+			return true
+		}
+	}
+	return false
 }
 
 // runLookupSkew tolerates clock drift between this server and GitHub when

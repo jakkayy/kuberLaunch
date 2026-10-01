@@ -219,8 +219,10 @@ func (c *Client) RollbackApp(ctx context.Context, appName string) error {
 
 // AppStatus holds the health and sync state of an ArgoCD application.
 type AppStatus struct {
-	Health string // Healthy | Progressing | Degraded | Suspended | Missing | Unknown
-	Sync   string // Synced | OutOfSync | Unknown
+	Health   string   // Healthy | Progressing | Degraded | Suspended | Missing | Unknown
+	Sync     string   // Synced | OutOfSync | Unknown
+	Revision string   // git revision ArgoCD last synced
+	Images   []string // container images currently running in the app
 }
 
 // GetAppStatus returns the current health and sync status of an ArgoCD app.
@@ -255,8 +257,12 @@ func (c *Client) GetAppStatus(ctx context.Context, appName string) (*AppStatus, 
 				Status string `json:"status"`
 			} `json:"health"`
 			Sync struct {
-				Status string `json:"status"`
+				Status   string `json:"status"`
+				Revision string `json:"revision"`
 			} `json:"sync"`
+			Summary struct {
+				Images []string `json:"images"`
+			} `json:"summary"`
 		} `json:"status"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -264,7 +270,9 @@ func (c *Client) GetAppStatus(ctx context.Context, appName string) (*AppStatus, 
 	}
 
 	return &AppStatus{
-		Health: result.Status.Health.Status,
-		Sync:   result.Status.Sync.Status,
+		Health:   result.Status.Health.Status,
+		Sync:     result.Status.Sync.Status,
+		Revision: result.Status.Sync.Revision,
+		Images:   result.Status.Summary.Images,
 	}, nil
 }
