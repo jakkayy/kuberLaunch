@@ -35,7 +35,6 @@ func (h *LogsHandler) Stream(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	c.Header("Access-Control-Allow-Origin", "*")
 
 	if h.kube == nil {
 		fmt.Fprintf(c.Writer, "data: %s\n\n", jsonEscape("error: Kubernetes integration not configured"))

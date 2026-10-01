@@ -23,7 +23,6 @@ func (h *SetupHandler) Stream(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	c.Header("Access-Control-Allow-Origin", "*")
 
 	ctx := c.Request.Context()
 	ch := h.svc.OneClickSetup(ctx, id)
