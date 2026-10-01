@@ -115,6 +115,8 @@ func main() {
 	})
 	deploymentSvc := service.NewDeploymentService(deployRepo, projectRepo, envRepo, githubClient, argocdClient)
 	secretSvc := service.NewSecretService(projectRepo, vaultClient)
+	promotionHandler := handler.NewPromotionHandler(service.NewPromotionService(
+		projectRepo, envRepo, repository.NewPromotionRepository(database), deployRepo, githubClient, argocdClient))
 	projectHandler := handler.NewProjectHandler(projectSvc, accessSvc)
 	repoHandler := handler.NewRepoHandler(projectSvc)
 	argocdHandler := handler.NewArgoCDHandler(projectSvc)
@@ -165,6 +167,7 @@ func main() {
 		projects.GET("/:id/download", viewer, projectHandler.Download)
 		projects.GET("/:id/preview", viewer, projectHandler.Preview)
 		projects.GET("/:id/environments", viewer, argocdHandler.Environments)
+		projects.GET("/:id/promotions", viewer, promotionHandler.List)
 		projects.GET("/:id/deployments", viewer, deploymentHandler.List)
 		projects.GET("/:id/deployments/:dep_id", viewer, deploymentHandler.Get)
 		projects.GET("/:id/deployments/:dep_id/stream", viewer, deploymentHandler.Stream)
@@ -182,6 +185,7 @@ func main() {
 		projects.POST("/:id/monitoring", maintainer, monitoringHandler.Setup)
 		projects.POST("/:id/setup", maintainer, setupHandler.Start)
 		projects.POST("/:id/deployments", maintainer, deploymentHandler.Trigger)
+		projects.POST("/:id/environments/:env/promote", maintainer, promotionHandler.Promote)
 		projects.POST("/:id/secrets", maintainer, secretHandler.Set)
 		projects.DELETE("/:id/secrets/:key", maintainer, secretHandler.Delete)
 		projects.GET("/:id/logs", maintainer, logsHandler.Stream)
@@ -189,6 +193,8 @@ func main() {
 		// owner: destructive actions and access management
 		projects.DELETE("/:id", owner, projectHandler.Delete)
 		projects.POST("/:id/environments/:env/rollback", owner, argocdHandler.Rollback)
+		projects.POST("/:id/promotions/:promotion_id/approve", owner, promotionHandler.Approve)
+		projects.POST("/:id/promotions/:promotion_id/reject", owner, promotionHandler.Reject)
 		projects.PUT("/:id/members", owner, accessHandler.AddMember)
 		projects.DELETE("/:id/members/:member_id", owner, accessHandler.RemoveMember)
 	}

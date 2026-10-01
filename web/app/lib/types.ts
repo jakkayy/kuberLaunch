@@ -98,3 +98,22 @@ export interface AuditEntry {
   details: Record<string, string>
   created_at: string
 }
+
+export type PromotionStatus = 'pending_approval' | 'rejected' | 'applied' | 'failed'
+
+export interface Promotion {
+  id: string
+  project_id: string
+  from_env: EnvName
+  to_env: EnvName
+  image_tag: string
+  status: PromotionStatus
+  message?: string
+  requested_by: string
+  requested_by_login?: string
+  decided_by?: string
+  decided_by_login?: string
+  deployment_id?: string
+  created_at: string
+  decided_at?: string
+}

@@ -125,7 +125,7 @@ export default async function ProjectPage({
         />
       )}
 
-      <Environments projectId={id} registered={!!project.argocd_app} canRollback={canOwn} />
+      <Environments projectId={id} registered={!!project.argocd_app} canPromote={canMaintain} canRollback={canOwn} />
 
       {/* Deploy section */}
       <div className="mb-6 border border-zinc-200 rounded-lg p-4">

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { EnvironmentStatus, EnvName } from '@/app/lib/types'
+import Promotions from './Promotions'
 
 const HEALTH_COLOR: Record<string, string> = {
   Healthy:     'text-green-600 bg-green-50 border-green-200',
@@ -26,15 +27,18 @@ function imageTag(images?: string[]) {
 export default function Environments({
   projectId,
   registered,
+  canPromote,
   canRollback,
 }: {
   projectId: string
   registered: boolean
+  canPromote: boolean
   canRollback: boolean
 }) {
   const [envs, setEnvs] = useState<EnvironmentStatus[]>([])
   const [busy, setBusy] = useState<EnvName | null>(null)
   const [message, setMessage] = useState('')
+  const [promotionsReload, setPromotionsReload] = useState(0)
 
   const fetchStatus = useCallback(async () => {
     const res = await fetch(`/api/projects/${projectId}/environments`)
@@ -63,6 +67,26 @@ export default function Environments({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Rollback failed')
       setMessage(`↩ ${env} rolled back · auto-sync ปิดอยู่`)
+      setTimeout(fetchStatus, 3000)
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : 'Unknown error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function promote(to: EnvName) {
+    const from = to === 'staging' ? 'dev' : 'staging'
+    const ask = to === 'prod' ? `Request promotion of ${from} → prod? Another owner must approve it.` : `Promote ${from} → ${to}?`
+    if (!confirm(ask)) return
+    setBusy(to)
+    setMessage('')
+    try {
+      const res = await fetch(`/api/projects/${projectId}/environments/${to}/promote`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Promotion failed')
+      setMessage(data.status === 'pending_approval' ? `Promotion to ${to} awaits approval` : `Promoting ${data.image_tag} to ${to}…`)
+      setPromotionsReload(t => t + 1)
       setTimeout(fetchStatus, 3000)
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Unknown error')
@@ -100,7 +124,16 @@ export default function Environments({
               </td>
               <td className={`px-2 py-2 text-xs font-medium ${SYNC_COLOR[e.sync] ?? 'text-zinc-400'}`}>{e.sync || '…'}</td>
               <td className="px-2 py-2 font-mono text-xs text-zinc-500">{imageTag(e.images)}</td>
-              <td className="px-4 py-2 text-right">
+              <td className="px-4 py-2 text-right whitespace-nowrap space-x-2">
+                {canPromote && e.name !== 'dev' && (
+                  <button
+                    onClick={() => promote(e.name)}
+                    disabled={busy !== null}
+                    className="text-xs font-medium px-2.5 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-40"
+                  >
+                    {e.name === 'prod' ? 'Request promote' : 'Promote'} ← {e.name === 'staging' ? 'dev' : 'staging'}
+                  </button>
+                )}
                 {canRollback && (
                   <button
                     onClick={() => rollback(e.name)}
@@ -115,6 +148,7 @@ export default function Environments({
           ))}
         </tbody>
       </table>
+      <Promotions projectId={projectId} canDecide={canRollback} reloadToken={promotionsReload} />
     </div>
   )
 }
