@@ -44,10 +44,6 @@ func (r *ProjectRepository) FindBySlug(ctx context.Context, slug string) (*model
 	return r.findOne(ctx, "slug", slug)
 }
 
-func (r *ProjectRepository) FindByArgoApp(ctx context.Context, app string) (*model.Project, error) {
-	return r.findOne(ctx, "argocd_app", app)
-}
-
 // findOne looks up a live project by a unique column; column is never user input.
 func (r *ProjectRepository) findOne(ctx context.Context, column, value string) (*model.Project, error) {
 	var p model.Project

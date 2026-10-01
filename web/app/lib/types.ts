@@ -59,10 +59,26 @@ export interface GeneratedFile {
 }
 
 export type DeploymentStatus = 'pending' | 'building' | 'deploying' | 'success' | 'failed'
+export type EnvName = 'dev' | 'staging' | 'prod'
+export const ENVIRONMENTS: EnvName[] = ['dev', 'staging', 'prod']
+
+export interface EnvironmentStatus {
+  id: string
+  project_id: string
+  name: EnvName
+  namespace: string
+  argocd_app: string
+  health: string
+  sync: string
+  revision?: string
+  images?: string[]
+  argocd_url?: string
+}
 
 export interface Deployment {
   id: string
   project_id: string
+  environment: EnvName
   branch: string
   workflow_run_id?: number
   image?: string

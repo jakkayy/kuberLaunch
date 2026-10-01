@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: {{ .Slug }}
+  name: {{ .EnvApp }}
   namespace: argocd
 spec:
   project: {{ .Slug }}
@@ -10,14 +10,18 @@ spec:
     targetRevision: HEAD
     path: helm
     helm:
+      releaseName: {{ .Slug }}
       valueFiles:
         - values.yaml
+        - values-{{ .Env }}.yaml
   destination:
     server: https://kubernetes.default.svc
-    namespace: {{ .Slug }}-dev
+    namespace: {{ .EnvNamespace }}
   syncPolicy:
+{{- if .AutoSync }}
     automated:
       prune: true
       selfHeal: true
+{{- end }}
     syncOptions:
       - CreateNamespace=true

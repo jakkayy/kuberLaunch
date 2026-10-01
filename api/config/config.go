@@ -38,10 +38,11 @@ type AuthConfig struct {
 }
 
 type ArgoCDConfig struct {
-	URL      string
-	Token    string // API token of a dedicated ArgoCD account (preferred)
-	Username string
-	Password string
+	URL       string
+	PublicURL string // ArgoCD UI address for links; defaults to URL
+	Token     string // API token of a dedicated ArgoCD account (preferred)
+	Username  string
+	Password  string
 }
 
 func (a ArgoCDConfig) Enabled() bool { return a.Token != "" || a.Password != "" }
@@ -132,10 +133,11 @@ func Load() *Config {
 			PrivateKey:     getFileOrEnv("GITHUB_APP_PRIVATE_KEY_PATH", "GITHUB_APP_PRIVATE_KEY"),
 		},
 		ArgoCD: ArgoCDConfig{
-			URL:      getEnv("ARGOCD_URL", "http://argocd.localhost:8090"),
-			Token:    getSecret("ARGOCD_TOKEN", ""),
-			Username: getEnv("ARGOCD_USERNAME", "admin"),
-			Password: getSecret("ARGOCD_PASSWORD", ""),
+			URL:       getEnv("ARGOCD_URL", "http://argocd.localhost:8090"),
+			Token:     getSecret("ARGOCD_TOKEN", ""),
+			PublicURL: getEnv("ARGOCD_PUBLIC_URL", getEnv("ARGOCD_URL", "http://argocd.localhost:8090")),
+			Username:  getEnv("ARGOCD_USERNAME", "admin"),
+			Password:  getSecret("ARGOCD_PASSWORD", ""),
 		},
 		Grafana: GrafanaConfig{
 			URL:       getEnv("GRAFANA_URL", "http://grafana.localhost:8090"),

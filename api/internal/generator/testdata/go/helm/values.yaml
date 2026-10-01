@@ -1,9 +1,10 @@
+# Defaults shared by every environment. Per-environment overrides, including
+# the deployed image tag, live in values-<env>.yaml.
 replicaCount: 1
 
 image:
   repository: ghcr.io/acme/demo-service
-  pullPolicy: Always
-  tag: "latest"
+  pullPolicy: IfNotPresent
   pullSecret: "ghcr-secret"
 
 service:
@@ -13,7 +14,6 @@ service:
 ingress:
   enabled: true
   className: nginx
-  host: demo-service.local
 
 resources:
   requests:
@@ -36,3 +36,8 @@ externalSecret:
     authMount: kubernetes
     role: kuberlaunch-demo-service
     serviceAccount: demo-service-vault
+
+monitoring:
+  # Requires the Prometheus Operator CRDs (kube-prometheus-stack).
+  serviceMonitor: true
+  path: /metrics

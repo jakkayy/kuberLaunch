@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: demo-service
+  name: demo-service-dev
   namespace: argocd
 spec:
   project: demo-service
@@ -10,8 +10,10 @@ spec:
     targetRevision: HEAD
     path: helm
     helm:
+      releaseName: demo-service
       valueFiles:
         - values.yaml
+        - values-dev.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: demo-service-dev

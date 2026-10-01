@@ -1,0 +1,9 @@
+# staging environment (demo-service-staging).
+# image.tag changes only through a kuberLaunch promotion.
+replicaCount: 1
+
+image:
+  tag: "latest"
+
+ingress:
+  host: demo-service-staging.local

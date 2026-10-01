@@ -30,16 +30,11 @@ func fakeArgo(t *testing.T) (*Client, *[]recorded) {
 	return New(srv.URL, "tok", "", ""), &calls
 }
 
-func TestRegisterAppCreatesScopedProject(t *testing.T) {
+func TestEnsureProjectScopesRepoAndNamespaces(t *testing.T) {
 	c, calls := fakeArgo(t)
-	name, err := c.RegisterApp(context.Background(), "demo", "https://github.com/acme/demo")
-	if err != nil || name != "demo" {
-		t.Fatalf("RegisterApp = %q, %v", name, err)
+	if err := c.EnsureProject(context.Background(), "demo", "https://github.com/acme/demo"); err != nil {
+		t.Fatal(err)
 	}
-	if len(*calls) != 2 {
-		t.Fatalf("calls = %+v", *calls)
-	}
-
 	proj := (*calls)[0]
 	if proj.path != "/api/v1/projects" || proj.body["upsert"] != true {
 		t.Fatalf("project call = %+v", proj)
@@ -48,16 +43,36 @@ func TestRegisterAppCreatesScopedProject(t *testing.T) {
 	if repos := spec["sourceRepos"].([]any); len(repos) != 1 || repos[0] != "https://github.com/acme/demo" {
 		t.Errorf("sourceRepos = %v", repos)
 	}
-	dest := spec["destinations"].([]any)[0].(map[string]any)
-	if dest["namespace"] != "demo-*" {
+	if dest := spec["destinations"].([]any)[0].(map[string]any); dest["namespace"] != "demo-*" {
 		t.Errorf("destination namespace = %v", dest["namespace"])
 	}
+}
 
-	app := (*calls)[1]
-	if app.path != "/api/v1/applications" || app.query != "upsert=true" {
-		t.Fatalf("app call = %+v", app)
-	}
-	if p := app.body["spec"].(map[string]any)["project"]; p != "demo" {
-		t.Errorf("app project = %v, want demo", p)
+func TestRegisterApp(t *testing.T) {
+	for _, auto := range []bool{true, false} {
+		c, calls := fakeArgo(t)
+		err := c.RegisterApp(context.Background(), AppSpec{
+			Name: "demo-prod", Project: "demo", RepoURL: "https://github.com/acme/demo", ReleaseName: "demo",
+			ValueFiles: []string{"values.yaml", "values-prod.yaml"}, Namespace: "demo-prod", AutoSync: auto,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		app := (*calls)[0]
+		if app.path != "/api/v1/applications" || app.query != "upsert=true" {
+			t.Fatalf("app call = %+v", app)
+		}
+		spec := app.body["spec"].(map[string]any)
+		if spec["project"] != "demo" {
+			t.Errorf("project = %v", spec["project"])
+		}
+		helm := spec["source"].(map[string]any)["helm"].(map[string]any)
+		if helm["releaseName"] != "demo" || len(helm["valueFiles"].([]any)) != 2 {
+			t.Errorf("helm = %v", helm)
+		}
+		_, hasAuto := spec["syncPolicy"].(map[string]any)["automated"]
+		if hasAuto != auto {
+			t.Errorf("AutoSync=%v but automated present=%v", auto, hasAuto)
+		}
 	}
 }

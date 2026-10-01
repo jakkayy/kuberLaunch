@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jakkayy/kuberlauncher/api/internal/kube"
+	"github.com/jakkayy/kuberlauncher/api/internal/model"
 	"github.com/jakkayy/kuberlauncher/api/internal/service"
 )
 
@@ -18,18 +19,22 @@ func NewLogsHandler(svc *service.ProjectService, kube *kube.Client) *LogsHandler
 	return &LogsHandler{projectSvc: svc, kube: kube}
 }
 
-// Stream streams pod logs via SSE using the Kubernetes API.
-// GET /api/v1/projects/:id/logs
+// Stream streams pod logs of one environment via SSE using the Kubernetes API.
+// GET /api/v1/projects/:id/logs?env=dev
 func (h *LogsHandler) Stream(c *gin.Context) {
 	id := c.Param("id")
+	env := model.EnvName(c.DefaultQuery("env", string(model.EnvDev)))
 
 	p, err := h.projectSvc.GetByID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
 		return
 	}
-
-	namespace := p.Slug + "-dev"
+	namespace, err := h.projectSvc.Namespace(c.Request.Context(), id, env)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
 	labelSelector := "app=" + p.Slug
 
 	c.Header("Content-Type", "text/event-stream")

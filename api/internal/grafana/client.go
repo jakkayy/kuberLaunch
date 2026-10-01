@@ -106,23 +106,32 @@ func (c *Client) CreateDashboard(ctx context.Context, slug, folderUID string) (s
 	return c.publicURL + result.URL, nil
 }
 
-// buildDashboard returns a Grafana dashboard JSON with CPU, Memory, and HTTP panels
-// scoped to the given project slug (kubernetes namespace = slug-dev).
+// buildDashboard returns a Grafana dashboard JSON with CPU, Memory, and HTTP
+// panels for the project, with an environment selector over its namespaces.
 func buildDashboard(slug string) map[string]any {
-	namespace := slug + "-dev"
+	ns := `namespace="$namespace"`
 	return map[string]any{
 		"title":   slug + " — Overview",
 		"uid":     "kuberlauncher-dash-" + slug,
 		"tags":    []string{"kuberlauncher", slug},
 		"time":    map[string]string{"from": "now-1h", "to": "now"},
 		"refresh": "30s",
+		"templating": map[string]any{
+			"list": []map[string]any{{
+				"name":    "namespace",
+				"label":   "Environment",
+				"type":    "custom",
+				"query":   strings.Join([]string{slug + "-dev", slug + "-staging", slug + "-prod"}, ","),
+				"current": map[string]string{"text": slug + "-dev", "value": slug + "-dev"},
+			}},
+		},
 		"panels": []map[string]any{
 			panel(1, "CPU Usage", 0, 0,
-				`sum(rate(container_cpu_usage_seconds_total{namespace="`+namespace+`"}[5m])) by (pod)`),
+				`sum(rate(container_cpu_usage_seconds_total{`+ns+`}[5m])) by (pod)`),
 			panel(2, "Memory Usage (MB)", 12, 0,
-				`sum(container_memory_working_set_bytes{namespace="`+namespace+`"}) by (pod) / 1024 / 1024`),
+				`sum(container_memory_working_set_bytes{`+ns+`}) by (pod) / 1024 / 1024`),
 			panel(3, "HTTP Requests/sec", 0, 8,
-				`sum(rate(http_requests_total{namespace="`+namespace+`"}[1m])) by (pod)`),
+				`sum(rate(http_requests_total{`+ns+`}[1m])) by (pod)`),
 		},
 	}
 }

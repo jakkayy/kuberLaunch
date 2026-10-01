@@ -28,7 +28,11 @@ type deploymentStore interface {
 type projectFinder interface {
 	FindByID(ctx context.Context, id string) (*model.Project, error)
 	FindBySlug(ctx context.Context, slug string) (*model.Project, error)
-	FindByArgoApp(ctx context.Context, app string) (*model.Project, error)
+}
+
+type envFinder interface {
+	Find(ctx context.Context, projectID string, name model.EnvName) (*model.Environment, error)
+	FindByArgoApp(ctx context.Context, app string) (*model.Environment, error)
 }
 
 type workflowAPI interface {
@@ -47,6 +51,7 @@ type appStatusAPI interface {
 type DeploymentService struct {
 	deployRepo  deploymentStore
 	projectRepo projectFinder
+	envs        envFinder
 	github      workflowAPI  // nil when GitHub is not configured
 	argocd      appStatusAPI // nil when ArgoCD is not configured
 }
@@ -54,10 +59,11 @@ type DeploymentService struct {
 func NewDeploymentService(
 	deployRepo *repository.DeploymentRepository,
 	projectRepo *repository.ProjectRepository,
+	envs *repository.EnvironmentRepository,
 	github *gh.Client,
 	argocd *argocd.Client,
 ) *DeploymentService {
-	s := &DeploymentService{deployRepo: deployRepo, projectRepo: projectRepo}
+	s := &DeploymentService{deployRepo: deployRepo, projectRepo: projectRepo, envs: envs}
 	// Assign only non-nil pointers so the interface fields stay nil when an
 	// integration is disabled.
 	if github != nil {
@@ -91,6 +97,7 @@ func (s *DeploymentService) Trigger(ctx context.Context, projectID, branch strin
 
 	d := &model.Deployment{
 		ProjectID:   projectID,
+		Environment: model.EnvDev, // CI promotes builds of main into dev
 		Branch:      branch,
 		TriggeredBy: "user",
 		Status:      model.DeploymentStatusPending,
@@ -194,9 +201,13 @@ func (s *DeploymentService) PollStatus(ctx context.Context, deployID string) (mo
 		return s.applyRun(ctx, d, p, run), nil
 	}
 
-	// Phase 2: poll ArgoCD for sync + health
-	if d.Status == model.DeploymentStatusDeploying && p.ArgocdApp != "" && s.argocd != nil {
-		appStatus, err := s.argocd.GetAppStatus(ctx, p.ArgocdApp)
+	// Phase 2: poll ArgoCD for sync + health of the target environment
+	if d.Status == model.DeploymentStatusDeploying && s.argocd != nil {
+		env, err := s.envs.Find(ctx, p.ID, d.Environment)
+		if err != nil || env == nil || env.ArgocdApp == "" {
+			return d.Status, err
+		}
+		appStatus, err := s.argocd.GetAppStatus(ctx, env.ArgocdApp)
 		if err == nil {
 			return s.applyAppStatus(ctx, d, appStatus), nil
 		}
@@ -283,19 +294,19 @@ func runMatches(d *model.Deployment, ev WorkflowRunEvent) bool {
 		!ev.CreatedAt.Before(d.CreatedAt.Add(-runLookupSkew))
 }
 
-// HandleAppStatus applies an ArgoCD notification for app to its project's
-// deploying deployments.
+// HandleAppStatus applies an ArgoCD notification for app to the deploying
+// deployment of that app's environment.
 func (s *DeploymentService) HandleAppStatus(ctx context.Context, app string, st *argocd.AppStatus) error {
-	p, err := s.projectRepo.FindByArgoApp(ctx, app)
-	if err != nil || p == nil {
+	env, err := s.envs.FindByArgoApp(ctx, app)
+	if err != nil || env == nil {
 		return err
 	}
-	active, err := s.deployRepo.FindActiveByProject(ctx, p.ID)
+	active, err := s.deployRepo.FindActiveByProject(ctx, env.ProjectID)
 	if err != nil {
 		return err
 	}
 	for i := range active {
-		if active[i].Status == model.DeploymentStatusDeploying {
+		if active[i].Status == model.DeploymentStatusDeploying && active[i].Environment == env.Name {
 			s.applyAppStatus(ctx, &active[i], st)
 		}
 	}

@@ -6,5 +6,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  return relayStream(await apiFetch(`/api/v1/projects/${id}/logs`, { signal: req.signal }))
+  const env = req.nextUrl.searchParams.get('env') ?? 'dev'
+  return relayStream(await apiFetch(`/api/v1/projects/${id}/logs?env=${encodeURIComponent(env)}`, { signal: req.signal }))
 }

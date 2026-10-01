@@ -26,7 +26,7 @@ func newFakeDeployStore(ds ...*model.Deployment) *fakeDeployStore {
 
 func (s *fakeDeployStore) Create(_ context.Context, d *model.Deployment) error {
 	for _, other := range s.byID {
-		if other.ProjectID == d.ProjectID && !other.Status.IsTerminal() {
+		if other.ProjectID == d.ProjectID && other.Environment == d.Environment && !other.Status.IsTerminal() {
 			return repository.ErrDeploymentInProgress
 		}
 	}
@@ -91,13 +91,29 @@ func (f fakeProjects) FindBySlug(_ context.Context, slug string) (*model.Project
 	}
 	return nil, nil
 }
-func (f fakeProjects) FindByArgoApp(_ context.Context, app string) (*model.Project, error) {
-	for _, p := range f {
-		if p.ArgocdApp == app {
-			return p, nil
+
+type fakeEnvs []model.Environment
+
+func (f fakeEnvs) Find(_ context.Context, projectID string, name model.EnvName) (*model.Environment, error) {
+	for i := range f {
+		if f[i].ProjectID == projectID && f[i].Name == name {
+			return &f[i], nil
 		}
 	}
 	return nil, nil
+}
+func (f fakeEnvs) FindByArgoApp(_ context.Context, app string) (*model.Environment, error) {
+	for i := range f {
+		if f[i].ArgocdApp == app {
+			return &f[i], nil
+		}
+	}
+	return nil, nil
+}
+
+var demoEnvs = fakeEnvs{
+	{ProjectID: "p1", Name: model.EnvDev, ArgocdApp: "demo-dev"},
+	{ProjectID: "p1", Name: model.EnvStaging, ArgocdApp: "demo-staging"},
 }
 
 type fakeGitHub struct {
@@ -140,7 +156,7 @@ func (f *fakeArgo) GetAppStatus(context.Context, string) (*argocd.AppStatus, err
 var demoProject = &model.Project{ID: "p1", Slug: "demo", RepoURL: "https://github.com/Acme/demo", ArgocdApp: "demo"}
 
 func newTestService(store *fakeDeployStore, github *fakeGitHub, argo *fakeArgo) *DeploymentService {
-	s := &DeploymentService{deployRepo: store, projectRepo: fakeProjects{"p1": demoProject}}
+	s := &DeploymentService{deployRepo: store, projectRepo: fakeProjects{"p1": demoProject}, envs: demoEnvs}
 	if github != nil {
 		s.github = github
 	}
@@ -151,7 +167,7 @@ func newTestService(store *fakeDeployStore, github *fakeGitHub, argo *fakeArgo) 
 }
 
 func deployment(status model.DeploymentStatus) *model.Deployment {
-	return &model.Deployment{ID: "d1", ProjectID: "p1", Branch: "main", Status: status, CreatedAt: time.Now()}
+	return &model.Deployment{ID: "d1", ProjectID: "p1", Environment: model.EnvDev, Branch: "main", Status: status, CreatedAt: time.Now()}
 }
 
 func TestPollStatusBuilding(t *testing.T) {
@@ -350,9 +366,17 @@ func TestHandleAppStatus(t *testing.T) {
 	d.Image = "ghcr.io/acme/demo:sha-abcdef1"
 	store := newFakeDeployStore(d)
 	s := newTestService(store, &fakeGitHub{}, &fakeArgo{})
-	err := s.HandleAppStatus(context.Background(), "demo", &argocd.AppStatus{
-		Health: "Healthy", Sync: "Synced", Images: []string{"ghcr.io/acme/demo:sha-abcdef1"},
-	})
+	healthy := &argocd.AppStatus{Health: "Healthy", Sync: "Synced", Images: []string{"ghcr.io/acme/demo:sha-abcdef1"}}
+
+	// A notification for another environment's app must not complete a dev deployment.
+	if err := s.HandleAppStatus(context.Background(), "demo-staging", healthy); err != nil {
+		t.Fatal(err)
+	}
+	if store.byID["d1"].Status != model.DeploymentStatusDeploying {
+		t.Fatalf("staging event changed dev deployment to %s", store.byID["d1"].Status)
+	}
+
+	err := s.HandleAppStatus(context.Background(), "demo-dev", healthy)
 	if err != nil || store.byID["d1"].Status != model.DeploymentStatusSuccess {
 		t.Fatalf("status = %s, err %v", store.byID["d1"].Status, err)
 	}

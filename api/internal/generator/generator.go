@@ -6,6 +6,7 @@ import (
 	"embed"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
@@ -19,7 +20,8 @@ var templateFS embed.FS
 //
 //	1: initial templates
 //	2: per-project Vault SecretStore, ArgoCD AppProject, CI concurrency
-const TemplateVersion = 2
+//	3: dev/staging/prod environments, ServiceMonitor inside the Helm chart
+const TemplateVersion = 3
 
 // Settings are platform-wide values rendered into every project.
 type Settings struct {
@@ -58,6 +60,29 @@ type TemplateData struct {
 	VaultAuthMount string
 	VaultRole      string
 	VaultSA        string
+
+	// Set only while rendering per-environment templates.
+	Env          string
+	EnvNamespace string
+	EnvApp       string
+	AutoSync     bool
+	Replicas     int
+	IngressHost  string
+}
+
+// forEnv returns d with the per-environment fields filled for env.
+func (d TemplateData) forEnv(env model.EnvName) TemplateData {
+	d.Env = string(env)
+	d.EnvNamespace = model.Namespace(d.Slug, env)
+	d.EnvApp = model.AppName(d.Slug, env)
+	d.AutoSync = env.AutoSync()
+	d.Replicas = 1
+	d.IngressHost = d.Slug + "-" + string(env) + ".local"
+	if env == model.EnvProd {
+		d.Replicas = 2
+		d.IngressHost = d.Slug + ".local"
+	}
+	return d
 }
 
 type GeneratedFile struct {
@@ -89,15 +114,31 @@ func Generate(p *model.Project, settings Settings) ([]GeneratedFile, error) {
 	templateSets = append(templateSets, runtimeSpecific...)
 
 	var files []GeneratedFile
-	for _, ts := range templateSets {
-		content, err := renderTemplate(ts.templatePath, data)
+	render := func(templatePath, outputPath string, d TemplateData) error {
+		content, err := renderTemplate(templatePath, d)
 		if err != nil {
-			return nil, fmt.Errorf("render %s: %w", ts.templatePath, err)
+			return fmt.Errorf("render %s: %w", templatePath, err)
 		}
-		files = append(files, GeneratedFile{Path: ts.outputPath, Content: content})
+		files = append(files, GeneratedFile{Path: outputPath, Content: content})
+		return nil
+	}
+	for _, ts := range templateSets {
+		if err := render(ts.templatePath, ts.outputPath, data); err != nil {
+			return nil, err
+		}
+	}
+	for _, ts := range envTemplates() {
+		for _, env := range model.Environments {
+			if err := render(ts.templatePath, strings.ReplaceAll(ts.outputPath, "{env}", string(env)), data.forEnv(env)); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return files, nil
 }
+
+// ValuesFile is the Helm values file holding env's image tag.
+func ValuesFile(env model.EnvName) string { return "helm/values-" + string(env) + ".yaml" }
 
 func ToZip(files []GeneratedFile) ([]byte, error) {
 	var buf bytes.Buffer
@@ -131,10 +172,18 @@ func commonTemplates() []templateSpec {
 		{"templates/common/helm/templates/secretstore.yaml.tmpl", "helm/templates/secretstore.yaml"},
 		{"templates/common/helm/templates/service.yaml.tmpl", "helm/templates/service.yaml"},
 		{"templates/common/helm/templates/ingress.yaml.tmpl", "helm/templates/ingress.yaml"},
+		{"templates/common/helm/templates/servicemonitor.yaml.tmpl", "helm/templates/servicemonitor.yaml"},
 		{"templates/common/argocd/appproject.yaml.tmpl", "argocd/appproject.yaml"},
-		{"templates/common/argocd/application.yaml.tmpl", "argocd/application.yaml"},
 		{"templates/common/github/ci.yml.tmpl", ".github/workflows/ci.yml"},
-		{"templates/common/monitoring/servicemonitor.yaml.tmpl", "monitoring/servicemonitor.yaml"},
+	}
+}
+
+// envTemplates are rendered once per environment; {env} in the output path
+// is replaced with the environment name.
+func envTemplates() []templateSpec {
+	return []templateSpec{
+		{"templates/common/helm/values-env.yaml.tmpl", "helm/values-{env}.yaml"},
+		{"templates/common/argocd/application.yaml.tmpl", "argocd/application-{env}.yaml"},
 	}
 }
 

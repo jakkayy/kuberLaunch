@@ -20,17 +20,20 @@ func NewDeploymentRepository(db *sql.DB) *DeploymentRepository {
 
 // ErrDeploymentInProgress is returned by Create when the project already has
 // a non-terminal deployment.
-var ErrDeploymentInProgress = errors.New("a deployment is already in progress for this project")
+var ErrDeploymentInProgress = errors.New("a deployment is already in progress for this environment")
 
 func (r *DeploymentRepository) Create(ctx context.Context, d *model.Deployment) error {
+	if d.Environment == "" {
+		d.Environment = model.EnvDev
+	}
 	err := r.db.QueryRowContext(ctx,
-		`INSERT INTO deployments (project_id, branch, triggered_by, status)
-		 VALUES ($1, $2, $3, $4)
+		`INSERT INTO deployments (project_id, environment, branch, triggered_by, status, image)
+		 VALUES ($1, $2, $3, $4, $5, $6)
 		 RETURNING id, created_at, updated_at`,
-		d.ProjectID, d.Branch, d.TriggeredBy, d.Status,
+		d.ProjectID, d.Environment, d.Branch, d.TriggeredBy, d.Status, d.Image,
 	).Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt)
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "uniq_deployments_active_per_project" {
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "uniq_deployments_active_per_env" {
 		return ErrDeploymentInProgress
 	}
 	return err
@@ -39,9 +42,9 @@ func (r *DeploymentRepository) Create(ctx context.Context, d *model.Deployment) 
 func (r *DeploymentRepository) FindByID(ctx context.Context, id string) (*model.Deployment, error) {
 	var d model.Deployment
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, project_id, branch, workflow_run_id, image, triggered_by, status, created_at, updated_at
+		`SELECT id, project_id, environment, branch, workflow_run_id, image, triggered_by, status, created_at, updated_at
 		 FROM deployments WHERE id = $1`, id,
-	).Scan(&d.ID, &d.ProjectID, &d.Branch, &d.WorkflowRunID,
+	).Scan(&d.ID, &d.ProjectID, &d.Environment, &d.Branch, &d.WorkflowRunID,
 		&d.Image, &d.TriggeredBy, &d.Status, &d.CreatedAt, &d.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -51,7 +54,7 @@ func (r *DeploymentRepository) FindByID(ctx context.Context, id string) (*model.
 
 func (r *DeploymentRepository) FindByProject(ctx context.Context, projectID string) ([]model.Deployment, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, project_id, branch, workflow_run_id, image, triggered_by, status, created_at, updated_at
+		`SELECT id, project_id, environment, branch, workflow_run_id, image, triggered_by, status, created_at, updated_at
 		 FROM deployments WHERE project_id = $1 ORDER BY created_at DESC LIMIT 20`, projectID)
 	if err != nil {
 		return nil, err
@@ -61,7 +64,7 @@ func (r *DeploymentRepository) FindByProject(ctx context.Context, projectID stri
 	var deployments []model.Deployment
 	for rows.Next() {
 		var d model.Deployment
-		if err := rows.Scan(&d.ID, &d.ProjectID, &d.Branch, &d.WorkflowRunID,
+		if err := rows.Scan(&d.ID, &d.ProjectID, &d.Environment, &d.Branch, &d.WorkflowRunID,
 			&d.Image, &d.TriggeredBy, &d.Status, &d.CreatedAt, &d.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -100,7 +103,7 @@ func (r *DeploymentRepository) FindActiveByProject(ctx context.Context, projectI
 
 func (r *DeploymentRepository) findActive(ctx context.Context, projectID string) ([]model.Deployment, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, project_id, branch, workflow_run_id, image, triggered_by, status, created_at, updated_at
+		`SELECT id, project_id, environment, branch, workflow_run_id, image, triggered_by, status, created_at, updated_at
 		 FROM deployments
 		 WHERE status IN ('pending', 'building', 'deploying') AND ($1 = '' OR project_id = $1)
 		 ORDER BY created_at`, projectID)
@@ -112,7 +115,7 @@ func (r *DeploymentRepository) findActive(ctx context.Context, projectID string)
 	var deployments []model.Deployment
 	for rows.Next() {
 		var d model.Deployment
-		if err := rows.Scan(&d.ID, &d.ProjectID, &d.Branch, &d.WorkflowRunID,
+		if err := rows.Scan(&d.ID, &d.ProjectID, &d.Environment, &d.Branch, &d.WorkflowRunID,
 			&d.Image, &d.TriggeredBy, &d.Status, &d.CreatedAt, &d.UpdatedAt); err != nil {
 			return nil, err
 		}

@@ -1,0 +1,13 @@
+# {{ .Env }} environment ({{ .EnvNamespace }}).
+{{- if eq .Env "dev" }}
+# CI updates image.tag here on every push to main.
+{{- else }}
+# image.tag changes only through a kuberLaunch promotion.
+{{- end }}
+replicaCount: {{ .Replicas }}
+
+image:
+  tag: "latest"
+
+ingress:
+  host: {{ .IngressHost }}

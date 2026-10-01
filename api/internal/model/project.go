@@ -39,10 +39,10 @@ type Project struct {
 	// TemplateVersion is the generator.TemplateVersion last applied to the repo.
 	TemplateVersion int `json:"template_version" db:"template_version"`
 	// LatestTemplateVersion is the current generator version (set per request).
-	LatestTemplateVersion int `json:"latest_template_version,omitempty" db:"-"`
-	MyRole     Role          `json:"my_role,omitempty" db:"-"` // set per request
-	CreatedAt  time.Time     `json:"created_at" db:"created_at"`
-	UpdatedAt  time.Time     `json:"updated_at" db:"updated_at"`
+	LatestTemplateVersion int       `json:"latest_template_version,omitempty" db:"-"`
+	MyRole                Role      `json:"my_role,omitempty" db:"-"` // set per request
+	CreatedAt             time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at" db:"updated_at"`
 }
 
 type CreateProjectRequest struct {

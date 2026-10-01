@@ -33,7 +33,9 @@ export default function DeploymentHistory({ deployments }: { deployments: Deploy
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLOR[d.status] ?? ''}`}>
               {d.status}
             </span>
+            <span className="text-xs font-mono px-1.5 py-0.5 bg-zinc-100 text-zinc-600 rounded">{d.environment}</span>
             <span className="text-sm font-mono text-zinc-700">{d.branch}</span>
+            {d.image && <span className="text-xs font-mono text-zinc-400">{d.image.split(':').pop()}</span>}
             <span className="text-xs text-zinc-400">by {d.triggered_by}</span>
           </div>
           <span className="text-xs text-zinc-400 font-mono">{timeAgo(d.created_at)}</span>

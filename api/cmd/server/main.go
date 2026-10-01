@@ -98,11 +98,22 @@ func main() {
 
 	projectRepo := repository.NewProjectRepository(database)
 	deployRepo := repository.NewDeploymentRepository(database)
-	projectSvc := service.NewProjectService(projectRepo, githubClient, argocdClient, grafanaClient, vaultClient, generator.Settings{
-		VaultServer:    cfg.Vault.ClusterURL,
-		VaultAuthMount: cfg.Vault.K8sMount,
-	}, githubHooks(cfg))
-	deploymentSvc := service.NewDeploymentService(deployRepo, projectRepo, githubClient, argocdClient)
+	envRepo := repository.NewEnvironmentRepository(database)
+	projectSvc := service.NewProjectService(service.ProjectDeps{
+		Projects:     projectRepo,
+		Environments: envRepo,
+		GitHub:       githubClient,
+		ArgoCD:       argocdClient,
+		Grafana:      grafanaClient,
+		Vault:        vaultClient,
+		Generator: generator.Settings{
+			VaultServer:    cfg.Vault.ClusterURL,
+			VaultAuthMount: cfg.Vault.K8sMount,
+		},
+		Hooks:           githubHooks(cfg),
+		ArgoCDPublicURL: cfg.ArgoCD.PublicURL,
+	})
+	deploymentSvc := service.NewDeploymentService(deployRepo, projectRepo, envRepo, githubClient, argocdClient)
 	secretSvc := service.NewSecretService(projectRepo, vaultClient)
 	projectHandler := handler.NewProjectHandler(projectSvc, accessSvc)
 	repoHandler := handler.NewRepoHandler(projectSvc)
@@ -153,7 +164,7 @@ func main() {
 		projects.GET("/:id", viewer, projectHandler.GetByID)
 		projects.GET("/:id/download", viewer, projectHandler.Download)
 		projects.GET("/:id/preview", viewer, projectHandler.Preview)
-		projects.GET("/:id/argocd/status", viewer, argocdHandler.Status)
+		projects.GET("/:id/environments", viewer, argocdHandler.Environments)
 		projects.GET("/:id/deployments", viewer, deploymentHandler.List)
 		projects.GET("/:id/deployments/:dep_id", viewer, deploymentHandler.Get)
 		projects.GET("/:id/deployments/:dep_id/stream", viewer, deploymentHandler.Stream)
@@ -177,7 +188,7 @@ func main() {
 
 		// owner: destructive actions and access management
 		projects.DELETE("/:id", owner, projectHandler.Delete)
-		projects.POST("/:id/argocd/rollback", owner, argocdHandler.Rollback)
+		projects.POST("/:id/environments/:env/rollback", owner, argocdHandler.Rollback)
 		projects.PUT("/:id/members", owner, accessHandler.AddMember)
 		projects.DELETE("/:id/members/:member_id", owner, accessHandler.RemoveMember)
 	}

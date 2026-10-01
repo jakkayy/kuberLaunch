@@ -9,7 +9,7 @@ import DeploymentHistory from './DeploymentHistory'
 import SetupMonitoring from './SetupMonitoring'
 import SecretsPanel from './SecretsPanel'
 import OneClickSetup from './OneClickSetup'
-import ArgoCDStatus from './ArgoCDStatus'
+import Environments from './Environments'
 import PodLogs from './PodLogs'
 import MembersPanel from './MembersPanel'
 import AuditLog from './AuditLog'
@@ -125,7 +125,7 @@ export default async function ProjectPage({
         />
       )}
 
-      <ArgoCDStatus projectId={id} argocdApp={project.argocd_app ?? ''} canRollback={canOwn} />
+      <Environments projectId={id} registered={!!project.argocd_app} canRollback={canOwn} />
 
       {/* Deploy section */}
       <div className="mb-6 border border-zinc-200 rounded-lg p-4">

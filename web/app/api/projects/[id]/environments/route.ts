@@ -6,5 +6,5 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  return relayJSON(await apiFetch(`/api/v1/projects/${id}/argocd/status`))
+  return relayJSON(await apiFetch(`/api/v1/projects/${id}/environments`))
 }

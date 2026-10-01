@@ -1,0 +1,9 @@
+# prod environment (demo-service-prod).
+# image.tag changes only through a kuberLaunch promotion.
+replicaCount: 2
+
+image:
+  tag: "latest"
+
+ingress:
+  host: demo-service.local

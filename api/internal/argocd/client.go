@@ -100,46 +100,60 @@ func (c *Client) DeleteProject(ctx context.Context, slug string) error {
 	return err
 }
 
-// RegisterApp creates or updates the ArgoCD Application for a project inside
-// its own AppProject. Returns the application name.
-func (c *Client) RegisterApp(ctx context.Context, slug, repoURL string) (string, error) {
-	if err := c.EnsureProject(ctx, slug, repoURL); err != nil {
-		return "", err
-	}
+// AppSpec describes one environment's Application.
+type AppSpec struct {
+	Name        string // ArgoCD application name, e.g. demo-dev
+	Project     string // AppProject (the project slug)
+	RepoURL     string
+	ReleaseName string   // Helm release; identical across envs so object names are stable
+	ValueFiles  []string // relative to the chart path
+	Namespace   string
+	AutoSync    bool
+}
 
+// RegisterApp creates or updates an Application. Call EnsureProject first.
+func (c *Client) RegisterApp(ctx context.Context, spec AppSpec) error {
+	syncPolicy := map[string]any{"syncOptions": []string{"CreateNamespace=true"}}
+	if spec.AutoSync {
+		syncPolicy["automated"] = map[string]any{"prune": true, "selfHeal": true}
+	}
 	app := map[string]any{
-		"metadata": map[string]any{
-			"name":      slug,
-			"namespace": "argocd",
-		},
+		"metadata": map[string]any{"name": spec.Name, "namespace": "argocd"},
 		"spec": map[string]any{
-			"project": slug,
+			"project": spec.Project,
 			"source": map[string]any{
-				"repoURL":        repoURL,
+				"repoURL":        spec.RepoURL,
 				"targetRevision": "HEAD",
 				"path":           "helm",
 				"helm": map[string]any{
-					"valueFiles": []string{"values.yaml"},
+					"releaseName": spec.ReleaseName,
+					"valueFiles":  spec.ValueFiles,
 				},
 			},
 			"destination": map[string]any{
 				"server":    "https://kubernetes.default.svc",
-				"namespace": slug + "-dev",
+				"namespace": spec.Namespace,
 			},
-			"syncPolicy": map[string]any{
-				"automated": map[string]any{
-					"prune":    true,
-					"selfHeal": true,
-				},
-				"syncOptions": []string{"CreateNamespace=true"},
-			},
+			"syncPolicy": syncPolicy,
 		},
 	}
+	_, err := c.call(ctx, http.MethodPost, "/api/v1/applications?upsert=true", app, "create app", http.StatusOK)
+	return err
+}
 
-	if _, err := c.call(ctx, http.MethodPost, "/api/v1/applications?upsert=true", app, "create app", http.StatusOK); err != nil {
-		return "", err
-	}
-	return slug, nil
+// SyncApp starts a sync of the app to the latest Git revision.
+func (c *Client) SyncApp(ctx context.Context, appName string) error {
+	_, err := c.call(ctx, http.MethodPost, "/api/v1/applications/"+appName+"/sync",
+		map[string]any{"prune": true}, "sync app", http.StatusOK)
+	return err
+}
+
+// OrphanApp deletes an Application but leaves its Kubernetes resources
+// running, so another Application can adopt them without downtime.
+func (c *Client) OrphanApp(ctx context.Context, appName string) error {
+	_, err := c.call(ctx, http.MethodDelete, "/api/v1/applications/"+appName+"?cascade=false", nil,
+		"orphan app", http.StatusOK, http.StatusNotFound)
+	return err
 }
 
 // call sends an authenticated JSON request and returns the body when the

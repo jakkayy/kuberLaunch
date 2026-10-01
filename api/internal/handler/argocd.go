@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jakkayy/kuberlauncher/api/internal/model"
 	"github.com/jakkayy/kuberlauncher/api/internal/service"
 )
 
@@ -32,24 +33,22 @@ func (h *ArgoCDHandler) Register(c *gin.Context) {
 	})
 }
 
-// Status returns the current ArgoCD health + sync status.
-// GET /api/v1/projects/:id/argocd/status
-func (h *ArgoCDHandler) Status(c *gin.Context) {
-	id := c.Param("id")
-	status, err := h.svc.GetArgoCDStatus(c.Request.Context(), id)
+// Environments returns every environment with its live ArgoCD status.
+// GET /api/v1/projects/:id/environments
+func (h *ArgoCDHandler) Environments(c *gin.Context) {
+	envs, err := h.svc.Environments(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, status)
+	c.JSON(http.StatusOK, gin.H{"environments": envs})
 }
 
-// Rollback triggers an ArgoCD rollback to the previous revision.
-// POST /api/v1/projects/:id/argocd/rollback
+// Rollback rolls one environment back to its previous revision.
+// POST /api/v1/projects/:id/environments/:env/rollback
 func (h *ArgoCDHandler) Rollback(c *gin.Context) {
-	id := c.Param("id")
-	if err := h.svc.RollbackArgoCD(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := h.svc.RollbackArgoCD(c.Request.Context(), c.Param("id"), model.EnvName(c.Param("env"))); err != nil {
+		respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
