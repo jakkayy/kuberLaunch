@@ -99,41 +99,41 @@ func Load() *Config {
 		Port: getEnv("PORT", "8080"),
 		Env:  getEnv("ENV", "development"),
 		Auth: AuthConfig{
-			JWTSecret: getEnv("AUTH_JWT_SECRET", ""),
+			JWTSecret: getSecret("AUTH_JWT_SECRET", ""),
 			Admins:    strings.Split(getEnv("PLATFORM_ADMINS", ""), ","),
 		},
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
 			Port:     getEnv("DB_PORT", "5432"),
 			User:     getEnv("DB_USER", "kuberlauncher"),
-			Password: getEnv("DB_PASSWORD", "kuberlauncher"),
+			Password: getSecret("DB_PASSWORD", "kuberlauncher"),
 			Name:     getEnv("DB_NAME", "kuberlauncher"),
 		},
 		GitHub: GitHubConfig{
 			Owner:          getEnv("GITHUB_OWNER", ""),
 			OwnerIsOrg:     getEnv("GITHUB_OWNER_IS_ORG", "false") == "true",
-			Token:          getEnv("GITHUB_TOKEN", ""),
+			Token:          getSecret("GITHUB_TOKEN", ""),
 			AppID:          getInt("GITHUB_APP_ID"),
 			InstallationID: getInt("GITHUB_APP_INSTALLATION_ID"),
 			PrivateKey:     getFileOrEnv("GITHUB_APP_PRIVATE_KEY_PATH", "GITHUB_APP_PRIVATE_KEY"),
 		},
 		ArgoCD: ArgoCDConfig{
 			URL:      getEnv("ARGOCD_URL", "http://argocd.localhost:8090"),
-			Token:    getEnv("ARGOCD_TOKEN", ""),
+			Token:    getSecret("ARGOCD_TOKEN", ""),
 			Username: getEnv("ARGOCD_USERNAME", "admin"),
-			Password: getEnv("ARGOCD_PASSWORD", ""),
+			Password: getSecret("ARGOCD_PASSWORD", ""),
 		},
 		Grafana: GrafanaConfig{
 			URL:       getEnv("GRAFANA_URL", "http://grafana.localhost:8090"),
 			PublicURL: getEnv("GRAFANA_PUBLIC_URL", ""),
 			Username:  getEnv("GRAFANA_USERNAME", "admin"),
-			Password:  getEnv("GRAFANA_PASSWORD", "admin"),
+			Password:  getSecret("GRAFANA_PASSWORD", "admin"),
 		},
 		Vault: VaultConfig{
 			URL:          getEnv("VAULT_URL", "http://vault.localhost:8090"),
 			ClusterURL:   getEnv("VAULT_CLUSTER_URL", "http://vault.vault.svc.cluster.local:8200"),
 			AuthMethod:   getEnv("VAULT_AUTH_METHOD", "token"),
-			Token:        getEnv("VAULT_TOKEN", ""),
+			Token:        getSecret("VAULT_TOKEN", ""),
 			K8sMount:     getEnv("VAULT_K8S_MOUNT", "kubernetes"),
 			K8sRole:      getEnv("VAULT_K8S_ROLE", "kuberlaunch-api"),
 			K8sTokenPath: getEnv("VAULT_K8S_TOKEN_PATH", "/var/run/secrets/kubernetes.io/serviceaccount/token"),
@@ -156,6 +156,20 @@ func getFileOrEnv(pathKey, valueKey string) []byte {
 		return b
 	}
 	return []byte(os.Getenv(valueKey))
+}
+
+// getSecret reads a secret from the file named by KEY_FILE when set (e.g. a
+// Kubernetes Secret synced from Vault by External Secrets and mounted as a
+// volume), otherwise from the KEY environment variable.
+func getSecret(key, fallback string) string {
+	if path := os.Getenv(key + "_FILE"); path != "" {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			log.Fatalf("read %s_FILE: %v", key, err)
+		}
+		return strings.TrimSpace(string(b))
+	}
+	return getEnv(key, fallback)
 }
 
 func getEnv(key, fallback string) string {

@@ -43,5 +43,16 @@ vault write auth/kubernetes/role/kuberlaunch-api \
   token_policies=kuberlaunch-api \
   token_ttl=1h
 
+# Read-only access to the platform's own secrets for External Secrets
+# (k8s/platform/kuberlaunch-secrets.yaml).
+vault policy write kuberlaunch-platform-secrets - <<'POLICY'
+path "secret/data/platform/kuberlaunch" { capabilities = ["read"] }
+POLICY
+vault write auth/kubernetes/role/kuberlaunch-platform-secrets \
+  bound_service_account_names=kuberlaunch-secrets \
+  bound_service_account_namespaces="$API_NAMESPACE" \
+  token_policies=kuberlaunch-platform-secrets \
+  token_ttl=1h
+
 echo "Vault configured. Run the API with:"
 echo "  VAULT_AUTH_METHOD=kubernetes VAULT_K8S_ROLE=kuberlaunch-api"
