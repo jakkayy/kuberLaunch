@@ -14,9 +14,9 @@ import (
 	"github.com/jakkayy/kuberlauncher/api/config"
 	"github.com/jakkayy/kuberlauncher/api/internal/argocd"
 	"github.com/jakkayy/kuberlauncher/api/internal/db"
+	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/grafana"
 	"github.com/jakkayy/kuberlauncher/api/internal/handler"
-	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
 	"github.com/jakkayy/kuberlauncher/api/internal/service"
 	"github.com/jakkayy/kuberlauncher/api/internal/vault"
@@ -108,6 +108,10 @@ func main() {
 		projects.GET("/:id/logs", logsHandler.Stream)
 	}
 
+	watchCtx, stopWatch := context.WithCancel(context.Background())
+	defer stopWatch()
+	go deploymentSvc.Watch(watchCtx, 10*time.Second)
+
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", cfg.Port),
 		Handler: r,
@@ -123,6 +127,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+	stopWatch()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

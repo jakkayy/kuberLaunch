@@ -75,3 +75,25 @@ func (r *DeploymentRepository) SetImage(ctx context.Context, id, image string) e
 		`UPDATE deployments SET image = $1, updated_at = NOW() WHERE id = $2`, image, id)
 	return err
 }
+
+// FindActive returns all deployments that have not reached a terminal state.
+func (r *DeploymentRepository) FindActive(ctx context.Context) ([]model.Deployment, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, project_id, branch, workflow_run_id, image, triggered_by, status, created_at, updated_at
+		 FROM deployments WHERE status IN ('pending', 'building', 'deploying') ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var deployments []model.Deployment
+	for rows.Next() {
+		var d model.Deployment
+		if err := rows.Scan(&d.ID, &d.ProjectID, &d.Branch, &d.WorkflowRunID,
+			&d.Image, &d.TriggeredBy, &d.Status, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			return nil, err
+		}
+		deployments = append(deployments, d)
+	}
+	return deployments, rows.Err()
+}

@@ -83,9 +83,45 @@ func (s *DeploymentService) ListByProject(ctx context.Context, projectID string)
 	return s.deployRepo.FindByProject(ctx, projectID)
 }
 
+// DeploymentTimeout is how long a deployment may stay non-terminal before it is marked failed.
+const DeploymentTimeout = 30 * time.Minute
+
+// Watch polls every active deployment on each tick until ctx is cancelled.
+// It runs server-side so deployments progress even when no browser is watching.
+func (s *DeploymentService) Watch(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.pollActive(ctx)
+		}
+	}
+}
+
+func (s *DeploymentService) pollActive(ctx context.Context) {
+	active, err := s.deployRepo.FindActive(ctx)
+	if err != nil {
+		log.Printf("watch deployments: %v", err)
+		return
+	}
+	for _, d := range active {
+		if time.Since(d.CreatedAt) > DeploymentTimeout {
+			log.Printf("deployment %s timed out after %s", d.ID, DeploymentTimeout)
+			_ = s.deployRepo.UpdateStatus(ctx, d.ID, model.DeploymentStatusFailed)
+			continue
+		}
+		if _, err := s.PollStatus(ctx, d.ID); err != nil {
+			log.Printf("poll deployment %s: %v", d.ID, err)
+		}
+	}
+}
+
 // PollStatus checks GitHub Actions + ArgoCD and updates the deployment status.
-// Returns the updated status. Intended to be called repeatedly from the SSE handler.
-func (s *DeploymentService) PollStatus(ctx context.Context, deployID, projectSlug, argocdApp string) (model.DeploymentStatus, error) {
+// Returns the updated status.
+func (s *DeploymentService) PollStatus(ctx context.Context, deployID string) (model.DeploymentStatus, error) {
 	d, err := s.deployRepo.FindByID(ctx, deployID)
 	if err != nil || d == nil {
 		return model.DeploymentStatusFailed, fmt.Errorf("deployment not found")
@@ -93,10 +129,14 @@ func (s *DeploymentService) PollStatus(ctx context.Context, deployID, projectSlu
 	if d.Status.IsTerminal() {
 		return d.Status, nil
 	}
+	p, err := s.projectRepo.FindByID(ctx, d.ProjectID)
+	if err != nil || p == nil {
+		return d.Status, fmt.Errorf("project not found")
+	}
 
 	// Phase 1: poll GitHub Actions for run status
-	if d.Status == model.DeploymentStatusBuilding {
-		runID, status, conclusion, err := s.github.GetLatestWorkflowRun(ctx, projectSlug)
+	if d.Status == model.DeploymentStatusBuilding && s.github != nil {
+		runID, status, conclusion, err := s.github.GetLatestWorkflowRun(ctx, p.Slug)
 		if err == nil && runID > 0 {
 			if d.WorkflowRunID == nil {
 				_ = s.deployRepo.SetWorkflowRunID(ctx, deployID, runID)
@@ -116,8 +156,8 @@ func (s *DeploymentService) PollStatus(ctx context.Context, deployID, projectSlu
 	}
 
 	// Phase 2: poll ArgoCD for sync + health
-	if d.Status == model.DeploymentStatusDeploying && argocdApp != "" && s.argocd != nil {
-		appStatus, err := s.argocd.GetAppStatus(ctx, argocdApp)
+	if d.Status == model.DeploymentStatusDeploying && p.ArgocdApp != "" && s.argocd != nil {
+		appStatus, err := s.argocd.GetAppStatus(ctx, p.ArgocdApp)
 		if err == nil {
 			if appStatus.Health == "Healthy" && appStatus.Sync == "Synced" {
 				_ = s.deployRepo.UpdateStatus(ctx, deployID, model.DeploymentStatusSuccess)
@@ -170,6 +210,3 @@ func addWorkflowDispatch(content string) string {
 	}
 	return content
 }
-
-// Ensure time is imported (used in PollStatus timeout logic)
-var _ = time.Second
