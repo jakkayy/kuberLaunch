@@ -34,7 +34,7 @@ func main() {
 		Database: model.Database(*database),
 		Cache:    model.Cache(*cache),
 	}
-	files, err := generator.Generate(p, *owner)
+	files, err := generator.Generate(p, generator.Settings{Owner: *owner})
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/jakkayy/kuberlauncher/api/internal/argocd"
 	"github.com/jakkayy/kuberlauncher/api/internal/auth"
 	"github.com/jakkayy/kuberlauncher/api/internal/db"
+	"github.com/jakkayy/kuberlauncher/api/internal/generator"
 	gh "github.com/jakkayy/kuberlauncher/api/internal/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/grafana"
 	"github.com/jakkayy/kuberlauncher/api/internal/handler"
@@ -68,9 +69,16 @@ func main() {
 	}
 
 	var vaultClient *vault.Client
-	if cfg.Vault.Token != "" {
+	switch {
+	case !cfg.Vault.Enabled():
+	case cfg.Vault.AuthMethod == "kubernetes":
+		vaultClient = vault.NewKubernetes(cfg.Vault.URL, vault.KubernetesAuth{
+			Mount: cfg.Vault.K8sMount, Role: cfg.Vault.K8sRole, TokenPath: cfg.Vault.K8sTokenPath,
+		})
+		log.Printf("Vault integration enabled via Kubernetes auth (%s, role %s)", cfg.Vault.URL, cfg.Vault.K8sRole)
+	default:
 		vaultClient = vault.New(cfg.Vault.URL, cfg.Vault.Token)
-		log.Printf("Vault integration enabled (%s)", cfg.Vault.URL)
+		log.Printf("WARNING: Vault integration uses a static token; prefer VAULT_AUTH_METHOD=kubernetes (%s)", cfg.Vault.URL)
 	}
 
 	kubeClient, err := kube.New()
@@ -90,7 +98,10 @@ func main() {
 
 	projectRepo := repository.NewProjectRepository(database)
 	deployRepo := repository.NewDeploymentRepository(database)
-	projectSvc := service.NewProjectService(projectRepo, githubClient, argocdClient, grafanaClient)
+	projectSvc := service.NewProjectService(projectRepo, githubClient, argocdClient, grafanaClient, vaultClient, generator.Settings{
+		VaultServer:    cfg.Vault.ClusterURL,
+		VaultAuthMount: cfg.Vault.K8sMount,
+	})
 	deploymentSvc := service.NewDeploymentService(deployRepo, projectRepo, githubClient, argocdClient)
 	secretSvc := service.NewSecretService(projectRepo, vaultClient)
 	projectHandler := handler.NewProjectHandler(projectSvc, accessSvc)

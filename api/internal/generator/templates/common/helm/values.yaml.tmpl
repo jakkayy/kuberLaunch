@@ -25,7 +25,14 @@ resources:
 
 env: []
 
+# Secrets are read from Vault path secret/kuberlauncher/{{ .Slug }} by External
+# Secrets, authenticating as a dedicated service account (Vault Kubernetes auth)
+# that can read only this project's path.
 externalSecret:
   enabled: true
-  storeRef: vault-backend
   refreshInterval: 1m
+  vault:
+    server: {{ .VaultServer }}
+    authMount: {{ .VaultAuthMount }}
+    role: {{ .VaultRole }}
+    serviceAccount: {{ .VaultSA }}

@@ -25,7 +25,14 @@ resources:
 
 env: []
 
+# Secrets are read from Vault path secret/kuberlauncher/demo-service by External
+# Secrets, authenticating as a dedicated service account (Vault Kubernetes auth)
+# that can read only this project's path.
 externalSecret:
   enabled: true
-  storeRef: vault-backend
   refreshInterval: 1m
+  vault:
+    server: http://vault.vault.svc.cluster.local:8200
+    authMount: kubernetes
+    role: kuberlaunch-demo-service
+    serviceAccount: demo-service-vault

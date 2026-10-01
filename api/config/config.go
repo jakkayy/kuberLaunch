@@ -45,8 +45,20 @@ type GrafanaConfig struct {
 }
 
 type VaultConfig struct {
-	URL   string
-	Token string
+	URL string
+	// ClusterURL is Vault's address as seen by pods (External Secrets).
+	ClusterURL string
+	// AuthMethod is "token" (local dev) or "kubernetes".
+	AuthMethod string
+	Token      string
+	// Kubernetes auth settings for the API's own service account.
+	K8sMount     string
+	K8sRole      string
+	K8sTokenPath string
+}
+
+func (v VaultConfig) Enabled() bool {
+	return v.AuthMethod == "kubernetes" || v.Token != ""
 }
 
 type GitHubConfig struct {
@@ -118,8 +130,13 @@ func Load() *Config {
 			Password:  getEnv("GRAFANA_PASSWORD", "admin"),
 		},
 		Vault: VaultConfig{
-			URL:   getEnv("VAULT_URL", "http://vault.localhost:8090"),
-			Token: getEnv("VAULT_TOKEN", "root"),
+			URL:          getEnv("VAULT_URL", "http://vault.localhost:8090"),
+			ClusterURL:   getEnv("VAULT_CLUSTER_URL", "http://vault.vault.svc.cluster.local:8200"),
+			AuthMethod:   getEnv("VAULT_AUTH_METHOD", "token"),
+			Token:        getEnv("VAULT_TOKEN", ""),
+			K8sMount:     getEnv("VAULT_K8S_MOUNT", "kubernetes"),
+			K8sRole:      getEnv("VAULT_K8S_ROLE", "kuberlaunch-api"),
+			K8sTokenPath: getEnv("VAULT_K8S_TOKEN_PATH", "/var/run/secrets/kubernetes.io/serviceaccount/token"),
 		},
 	}
 }

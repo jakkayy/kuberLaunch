@@ -14,6 +14,29 @@ import (
 //go:embed all:templates
 var templateFS embed.FS
 
+// Settings are platform-wide values rendered into every project.
+type Settings struct {
+	Owner string // GitHub owner of generated repos; "org" when empty
+
+	// VaultServer is the Vault address as seen from inside the cluster.
+	VaultServer string
+	// VaultAuthMount is the Kubernetes auth mount path in Vault.
+	VaultAuthMount string
+}
+
+func (s Settings) withDefaults() Settings {
+	if s.Owner == "" {
+		s.Owner = "org"
+	}
+	if s.VaultServer == "" {
+		s.VaultServer = "http://vault.vault.svc.cluster.local:8200"
+	}
+	if s.VaultAuthMount == "" {
+		s.VaultAuthMount = "kubernetes"
+	}
+	return s
+}
+
 type TemplateData struct {
 	Name     string
 	Slug     string
@@ -23,6 +46,11 @@ type TemplateData struct {
 	Port     int
 	Owner    string
 	Image    string
+
+	VaultServer    string
+	VaultAuthMount string
+	VaultRole      string
+	VaultSA        string
 }
 
 type GeneratedFile struct {
@@ -30,10 +58,8 @@ type GeneratedFile struct {
 	Content string
 }
 
-func Generate(p *model.Project, owner string) ([]GeneratedFile, error) {
-	if owner == "" {
-		owner = "org"
-	}
+func Generate(p *model.Project, settings Settings) ([]GeneratedFile, error) {
+	settings = settings.withDefaults()
 	data := TemplateData{
 		Name:     p.Name,
 		Slug:     p.Slug,
@@ -41,8 +67,14 @@ func Generate(p *model.Project, owner string) ([]GeneratedFile, error) {
 		Database: string(p.Database),
 		Cache:    string(p.Cache),
 		Port:     runtimePort(p.Runtime),
-		Owner:    owner,
-		Image:    fmt.Sprintf("ghcr.io/%s/%s:latest", owner, p.Slug),
+		Owner:    settings.Owner,
+		Image:    fmt.Sprintf("ghcr.io/%s/%s:latest", settings.Owner, p.Slug),
+
+		VaultServer:    settings.VaultServer,
+		VaultAuthMount: settings.VaultAuthMount,
+		// Must match vault.ProjectPolicyName / ProjectServiceAccount.
+		VaultRole: "kuberlaunch-" + p.Slug,
+		VaultSA:   p.Slug + "-vault",
 	}
 
 	templateSets := commonTemplates()
@@ -89,6 +121,7 @@ func commonTemplates() []templateSpec {
 		{"templates/common/helm/values.yaml.tmpl", "helm/values.yaml"},
 		{"templates/common/helm/templates/deployment.yaml.tmpl", "helm/templates/deployment.yaml"},
 		{"templates/common/helm/templates/externalsecret.yaml.tmpl", "helm/templates/externalsecret.yaml"},
+		{"templates/common/helm/templates/secretstore.yaml.tmpl", "helm/templates/secretstore.yaml"},
 		{"templates/common/helm/templates/service.yaml.tmpl", "helm/templates/service.yaml"},
 		{"templates/common/helm/templates/ingress.yaml.tmpl", "helm/templates/ingress.yaml"},
 		{"templates/common/argocd/application.yaml.tmpl", "argocd/application.yaml"},

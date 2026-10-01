@@ -28,7 +28,7 @@ func sampleProject(rt model.Runtime) *model.Project {
 func TestGenerateGolden(t *testing.T) {
 	for _, rt := range []model.Runtime{model.RuntimeGo, model.RuntimeNextJS, model.RuntimeNestJS, model.RuntimeFastAPI} {
 		t.Run(string(rt), func(t *testing.T) {
-			files, err := Generate(sampleProject(rt), "acme")
+			files, err := Generate(sampleProject(rt), Settings{Owner: "acme"})
 			if err != nil {
 				t.Fatalf("Generate: %v", err)
 			}
@@ -62,7 +62,7 @@ func TestGenerateGolden(t *testing.T) {
 }
 
 func TestGenerateDefaultsOwner(t *testing.T) {
-	files, err := Generate(sampleProject(model.RuntimeGo), "")
+	files, err := Generate(sampleProject(model.RuntimeGo), Settings{})
 	if err != nil {
 		t.Fatal(err)
 	}

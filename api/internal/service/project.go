@@ -10,6 +10,7 @@ import (
 	"github.com/jakkayy/kuberlauncher/api/internal/grafana"
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
+	"github.com/jakkayy/kuberlauncher/api/internal/vault"
 )
 
 type ProjectService struct {
@@ -17,17 +18,21 @@ type ProjectService struct {
 	github  *gh.Client
 	argocd  *argocd.Client
 	grafana *grafana.Client
+	vault   *vault.Client
+	gen     generator.Settings
 }
 
-func NewProjectService(repo *repository.ProjectRepository, github *gh.Client, argocd *argocd.Client, grafana *grafana.Client) *ProjectService {
-	return &ProjectService{repo: repo, github: github, argocd: argocd, grafana: grafana}
-}
-
-func (s *ProjectService) githubOwner() string {
-	if s.github != nil {
-		return s.github.Owner()
+func NewProjectService(repo *repository.ProjectRepository, github *gh.Client, argocd *argocd.Client,
+	grafana *grafana.Client, vault *vault.Client, gen generator.Settings) *ProjectService {
+	if github != nil {
+		gen.Owner = github.Owner()
 	}
-	return ""
+	return &ProjectService{repo: repo, github: github, argocd: argocd, grafana: grafana, vault: vault, gen: gen}
+}
+
+// namespaces lists the Kubernetes namespaces a project deploys to.
+func namespaces(p *model.Project) []string {
+	return []string{p.Slug + "-dev"}
 }
 
 func (s *ProjectService) Create(ctx context.Context, req model.CreateProjectRequest) (*model.Project, []generator.GeneratedFile, error) {
@@ -54,7 +59,7 @@ func (s *ProjectService) Create(ctx context.Context, req model.CreateProjectRequ
 		return nil, nil, fmt.Errorf("create project: %w", err)
 	}
 
-	files, err := generator.Generate(p, s.githubOwner())
+	files, err := generator.Generate(p, s.gen)
 	if err != nil {
 		_ = s.repo.UpdateStatus(ctx, p.ID, model.ProjectStatusFailed)
 		return p, nil, fmt.Errorf("generate templates: %w", err)
@@ -104,6 +109,12 @@ func (s *ProjectService) Delete(ctx context.Context, id string) error {
 		}
 	}
 
+	if s.vault != nil {
+		if err := s.vault.DeleteProjectAccess(ctx, s.gen.VaultAuthMount, p.Slug); err != nil {
+			return fmt.Errorf("delete Vault access: %w", err)
+		}
+	}
+
 	return s.repo.Delete(ctx, id)
 }
 
@@ -112,7 +123,7 @@ func (s *ProjectService) Preview(ctx context.Context, id string) ([]generator.Ge
 	if err != nil {
 		return nil, err
 	}
-	return generator.Generate(p, s.githubOwner())
+	return generator.Generate(p, s.gen)
 }
 
 func (s *ProjectService) SetupMonitoring(ctx context.Context, id string) (string, error) {
@@ -156,7 +167,7 @@ func (s *ProjectService) RepairGitHub(ctx context.Context, id string) error {
 	if s.github == nil {
 		return fmt.Errorf("GitHub integration not configured")
 	}
-	files, err := generator.Generate(p, s.githubOwner())
+	files, err := generator.Generate(p, s.gen)
 	if err != nil {
 		return fmt.Errorf("generate files: %w", err)
 	}
@@ -179,6 +190,14 @@ func (s *ProjectService) RegisterArgoCD(ctx context.Context, id string) (string,
 
 	if s.argocd == nil {
 		return "", fmt.Errorf("ArgoCD integration not configured (ARGOCD_TOKEN missing)")
+	}
+
+	// Let the project's service account read its Vault secrets before the
+	// first sync creates the SecretStore.
+	if s.vault != nil {
+		if err := s.vault.EnsureProjectAccess(ctx, s.gen.VaultAuthMount, p.Slug, namespaces(p)); err != nil {
+			return "", fmt.Errorf("grant Vault access: %w", err)
+		}
 	}
 
 	appName, err := s.argocd.RegisterApp(ctx, p.Slug, p.RepoURL)
@@ -240,7 +259,7 @@ func (s *ProjectService) ConnectGitHub(ctx context.Context, id string) (string, 
 		return "", fmt.Errorf("GitHub integration not configured (GITHUB_TOKEN missing)")
 	}
 
-	files, err := generator.Generate(p, s.githubOwner())
+	files, err := generator.Generate(p, s.gen)
 	if err != nil {
 		return "", fmt.Errorf("generate files: %w", err)
 	}
