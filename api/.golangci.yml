@@ -10,6 +10,7 @@ linters:
         - (io.ReadCloser).Close
         - (*database/sql.Rows).Close
         - (*database/sql.DB).Close
+        - (*database/sql.Conn).Close
         - fmt.Fprintf
     staticcheck:
       checks:

@@ -2,10 +2,13 @@ package argocd
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 type recorded struct {
@@ -74,5 +77,52 @@ func TestRegisterApp(t *testing.T) {
 		if hasAuto != auto {
 			t.Errorf("AutoSync=%v but automated present=%v", auto, hasAuto)
 		}
+	}
+}
+
+func TestSessionIsCachedAndRefreshedOn401(t *testing.T) {
+	var logins, calls int
+	valid := ""
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/session" {
+			logins++
+			// exp far in the future, so only a 401 forces a new login.
+			valid = fmt.Sprintf("h.%s.s%d", base64.RawURLEncoding.EncodeToString([]byte(`{"exp":4102444800}`)), logins)
+			_ = json.NewEncoder(w).Encode(map[string]string{"token": valid})
+			return
+		}
+		calls++
+		if r.Header.Get("Authorization") != "Bearer "+valid {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":{"health":{"status":"Healthy"},"sync":{"status":"Synced"}}}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "", "admin", "pw")
+	for i := 0; i < 3; i++ {
+		if _, err := c.GetAppStatus(context.Background(), "demo-dev"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if logins != 1 {
+		t.Fatalf("logins = %d, want 1 (session cached)", logins)
+	}
+
+	valid = "revoked" // server-side revocation: cached session now gets 401
+	st, err := c.GetAppStatus(context.Background(), "demo-dev")
+	if err != nil || st.Health != "Healthy" || logins != 2 {
+		t.Fatalf("after revoke: status %+v err %v logins %d", st, err, logins)
+	}
+}
+
+func TestJWTExpiry(t *testing.T) {
+	tok := "h." + base64.RawURLEncoding.EncodeToString([]byte(`{"exp":1700000000}`)) + ".s"
+	if got := jwtExpiry(tok); !got.Equal(time.Unix(1700000000, 0)) {
+		t.Fatalf("jwtExpiry = %v", got)
+	}
+	if got := jwtExpiry("not-a-jwt"); time.Until(got) <= 0 {
+		t.Fatal("unparseable token should get a future fallback expiry")
 	}
 }

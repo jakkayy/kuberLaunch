@@ -9,6 +9,7 @@ import (
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	gh "github.com/google/go-github/v66/github"
 	"github.com/jakkayy/kuberlauncher/api/internal/generator"
+	"github.com/jakkayy/kuberlauncher/api/internal/httpx"
 	"golang.org/x/oauth2"
 )
 
@@ -24,7 +25,7 @@ type Client struct {
 // is an organization.
 func New(token, owner string, ownerIsOrg bool) *Client {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
-	tc := oauth2.NewClient(context.Background(), ts)
+	tc := &http.Client{Transport: &oauth2.Transport{Source: ts, Base: httpx.NewRetryTransport(nil)}}
 	return &Client{
 		gh:    gh.NewClient(tc),
 		owner: owner,
@@ -36,7 +37,7 @@ func New(token, owner string, ownerIsOrg bool) *Client {
 // short-lived and refreshed automatically; permissions come from the App
 // settings instead of a user's PAT. The installation must belong to the org owner.
 func NewApp(appID, installationID int64, privateKey []byte, owner string) (*Client, error) {
-	tr, err := ghinstallation.New(http.DefaultTransport, appID, installationID, privateKey)
+	tr, err := ghinstallation.New(httpx.NewRetryTransport(nil), appID, installationID, privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("github app transport: %w", err)
 	}

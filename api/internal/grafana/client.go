@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/jakkayy/kuberlauncher/api/internal/httpx"
 )
 
 type Client struct {
@@ -30,7 +32,7 @@ func New(url, publicURL, username, password string) *Client {
 		publicURL: strings.TrimRight(publicURL, "/"),
 		username:  username,
 		password:  password,
-		http:      &http.Client{Timeout: 30 * time.Second},
+		http:      httpx.Client(30 * time.Second),
 	}
 }
 

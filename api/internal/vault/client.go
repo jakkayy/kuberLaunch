@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jakkayy/kuberlauncher/api/internal/httpx"
 )
 
 type Client struct {
@@ -40,7 +42,7 @@ func New(url, token string) *Client {
 	return &Client{
 		baseURL:     url,
 		staticToken: token,
-		http:        &http.Client{Timeout: 15 * time.Second},
+		http:        httpx.Client(15 * time.Second),
 	}
 }
 
@@ -50,7 +52,7 @@ func NewKubernetes(url string, auth KubernetesAuth) *Client {
 	return &Client{
 		baseURL: url,
 		k8s:     &auth,
-		http:    &http.Client{Timeout: 15 * time.Second},
+		http:    httpx.Client(15 * time.Second),
 	}
 }
 
@@ -175,10 +177,13 @@ func (c *Client) expectOK(ctx context.Context, method, path string, body any, wh
 	if err != nil {
 		return fmt.Errorf("vault %s: %w", what, err)
 	}
-	if status != http.StatusOK && status != http.StatusNoContent && !(method == http.MethodDelete && status == http.StatusNotFound) {
-		return fmt.Errorf("vault %s %d: %s", what, status, string(b))
+	switch {
+	case status == http.StatusOK, status == http.StatusNoContent:
+		return nil
+	case method == http.MethodDelete && status == http.StatusNotFound:
+		return nil // already gone
 	}
-	return nil
+	return fmt.Errorf("vault %s %d: %s", what, status, string(b))
 }
 
 // secretPath returns the KV path for a project's secrets.
