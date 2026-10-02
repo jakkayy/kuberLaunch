@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server'
-
-const API_URL = process.env.API_URL ?? 'http://localhost:8080'
+import { apiFetch, relayJSON } from '@/app/lib/upstream'
 
 export async function POST(
   req: NextRequest,
@@ -8,13 +7,11 @@ export async function POST(
 ) {
   const { id } = await params
   const body = await req.text()
-  const upstream = await fetch(`${API_URL}/api/v1/projects/${id}/deployments`, {
+  return relayJSON(await apiFetch(`/api/v1/projects/${id}/deployments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body,
-  })
-  const data = await upstream.json()
-  return Response.json(data, { status: upstream.status })
+  }))
 }
 
 export async function GET(
@@ -22,9 +19,5 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const upstream = await fetch(`${API_URL}/api/v1/projects/${id}/deployments`, {
-    cache: 'no-store',
-  })
-  const data = await upstream.json()
-  return Response.json(data, { status: upstream.status })
+  return relayJSON(await apiFetch(`/api/v1/projects/${id}/deployments`))
 }

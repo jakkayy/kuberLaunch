@@ -1,0 +1,27 @@
+# The platform is deployed the same way as the services it creates: GitOps.
+# Apply once:  kubectl apply -f deploy/argocd/kuberlaunch.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kuberlaunch
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jakkayy/kuberLaunch
+    targetRevision: main
+    path: deploy/helm/kuberlaunch
+    helm:
+      valueFiles:
+        - values.yaml
+      # Override per installation, e.g. in a values file kept next to this one:
+      #   publicURL, ingress.host, api.env.GITHUB_OWNER, web.env.GITHUB_OAUTH_CLIENT_ID
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kuberlaunch
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

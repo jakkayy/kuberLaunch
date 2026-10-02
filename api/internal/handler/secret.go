@@ -30,7 +30,7 @@ func (h *SecretHandler) Set(c *gin.Context) {
 	}
 
 	if err := h.svc.Set(c.Request.Context(), projectID, req.Key, req.Value); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})

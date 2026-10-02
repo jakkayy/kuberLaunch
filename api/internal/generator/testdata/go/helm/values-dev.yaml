@@ -1,0 +1,13 @@
+# dev environment (demo-service-dev).
+# CI updates image.tag here on every push to main.
+replicaCount: 1
+
+image:
+  tag: "latest"
+
+ingress:
+  host: demo-service-dev.local
+
+database:
+  instances: 1
+  storage: 1Gi

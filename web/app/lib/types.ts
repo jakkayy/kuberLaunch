@@ -1,7 +1,14 @@
 export type Runtime = 'nextjs' | 'nestjs' | 'go' | 'fastapi'
-export type Database = 'postgres' | 'mysql' | 'mongodb' | 'none'
+export type Database = 'postgres' | 'mysql' | 'none'
 export type Cache = 'redis' | 'none'
 export type ProjectStatus = 'creating' | 'ready' | 'failed'
+export type Role = 'viewer' | 'maintainer' | 'owner'
+
+const ROLE_RANK: Record<Role, number> = { viewer: 1, maintainer: 2, owner: 3 }
+
+export function roleAtLeast(role: Role | undefined, min: Role): boolean {
+  return !!role && ROLE_RANK[role] >= ROLE_RANK[min]
+}
 
 export interface Project {
   id: string
@@ -14,8 +21,36 @@ export interface Project {
   argocd_app?: string
   grafana_url?: string
   status: ProjectStatus
+  my_role?: Role
+  template_version: number
+  latest_template_version?: number
   created_at: string
   updated_at: string
+}
+
+export interface ProjectMember {
+  id: string
+  project_id: string
+  user_id?: string
+  login?: string
+  team_id?: string
+  team_slug?: string
+  role: Role
+  created_at: string
+}
+
+export interface Team {
+  id: string
+  slug: string
+  name: string
+  my_role?: Role
+  created_at: string
+}
+
+export interface TeamMember {
+  user_id: string
+  login: string
+  role: Role
 }
 
 export interface GeneratedFile {
@@ -24,10 +59,26 @@ export interface GeneratedFile {
 }
 
 export type DeploymentStatus = 'pending' | 'building' | 'deploying' | 'success' | 'failed'
+export type EnvName = 'dev' | 'staging' | 'prod'
+export const ENVIRONMENTS: EnvName[] = ['dev', 'staging', 'prod']
+
+export interface EnvironmentStatus {
+  id: string
+  project_id: string
+  name: EnvName
+  namespace: string
+  argocd_app: string
+  health: string
+  sync: string
+  revision?: string
+  images?: string[]
+  argocd_url?: string
+}
 
 export interface Deployment {
   id: string
   project_id: string
+  environment: EnvName
   branch: string
   workflow_run_id?: number
   image?: string
@@ -35,4 +86,34 @@ export interface Deployment {
   status: DeploymentStatus
   created_at: string
   updated_at: string
+}
+
+export interface AuditEntry {
+  id: number
+  actor_id?: string
+  actor_login: string
+  action: string
+  project_id?: string
+  status: number
+  details: Record<string, string>
+  created_at: string
+}
+
+export type PromotionStatus = 'pending_approval' | 'rejected' | 'applied' | 'failed'
+
+export interface Promotion {
+  id: string
+  project_id: string
+  from_env: EnvName
+  to_env: EnvName
+  image_tag: string
+  status: PromotionStatus
+  message?: string
+  requested_by: string
+  requested_by_login?: string
+  decided_by?: string
+  decided_by_login?: string
+  deployment_id?: string
+  created_at: string
+  decided_at?: string
 }

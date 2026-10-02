@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: {{ .Slug }}
+  namespace: argocd
+spec:
+  description: kuberLaunch project {{ .Slug }}
+  sourceRepos:
+    - https://github.com/{{ .Owner }}/{{ .Slug }}
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: {{ .Slug }}-*
+  # Only the project's namespaces may be created at cluster scope.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace

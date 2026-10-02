@@ -1,0 +1,35 @@
+# Dedicated ArgoCD account for the kuberLaunch API, instead of admin.
+# After applying, create a token and set it as ARGOCD_TOKEN:
+#   argocd account generate-token --account kuberlaunch
+#
+# These are strategic-merge patches for the stock ArgoCD ConfigMaps:
+#   kubectl -n argocd patch cm argocd-cm --patch-file k8s/platform/argocd-account.yaml  (first document)
+# or merge the data keys into your GitOps-managed ArgoCD config.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+data:
+  # apiKey only: the account cannot log in to the UI.
+  accounts.kuberlaunch: apiKey
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+data:
+  # kuberLaunch manages one AppProject and its Applications per service.
+  policy.csv: |
+    p, role:kuberlaunch, projects, get, *, allow
+    p, role:kuberlaunch, projects, create, *, allow
+    p, role:kuberlaunch, projects, update, *, allow
+    p, role:kuberlaunch, projects, delete, *, allow
+    p, role:kuberlaunch, applications, get, */*, allow
+    p, role:kuberlaunch, applications, create, */*, allow
+    p, role:kuberlaunch, applications, update, */*, allow
+    p, role:kuberlaunch, applications, delete, */*, allow
+    p, role:kuberlaunch, applications, sync, */*, allow
+    p, role:kuberlaunch, applications, action/*, */*, allow
+    g, kuberlaunch, role:kuberlaunch

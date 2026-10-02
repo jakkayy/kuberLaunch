@@ -7,22 +7,32 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/jakkayy/kuberlauncher/api/internal/httpx"
 )
 
 type Client struct {
-	baseURL  string
-	username string
-	password string
-	http     *http.Client
+	baseURL   string
+	publicURL string
+	username  string
+	password  string
+	http      *http.Client
 }
 
-func New(url, username, password string) *Client {
+// New creates a Grafana client. url is used for API calls; publicURL is the
+// address users open in a browser (defaults to url when empty).
+func New(url, publicURL, username, password string) *Client {
+	if publicURL == "" {
+		publicURL = url
+	}
 	return &Client{
-		baseURL:  url,
-		username: username,
-		password: password,
-		http:     &http.Client{Timeout: 30 * time.Second},
+		baseURL:   url,
+		publicURL: strings.TrimRight(publicURL, "/"),
+		username:  username,
+		password:  password,
+		http:      httpx.Client(30 * time.Second),
 	}
 }
 
@@ -38,7 +48,6 @@ func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte,
 	}
 	req.SetBasicAuth(c.username, c.password)
 	req.Header.Set("Content-Type", "application/json")
-	req.Host = "grafana.localhost"
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -72,7 +81,7 @@ func (c *Client) EnsureFolder(ctx context.Context, slug string) (string, error) 
 }
 
 // CreateDashboard creates a pre-built dashboard for the project.
-// Returns the dashboard URL.
+// Returns the browser-facing dashboard URL.
 func (c *Client) CreateDashboard(ctx context.Context, slug, folderUID string) (string, error) {
 	dashboard := buildDashboard(slug)
 	payload := map[string]any{
@@ -96,26 +105,35 @@ func (c *Client) CreateDashboard(ctx context.Context, slug, folderUID string) (s
 	if err := json.Unmarshal(b, &result); err != nil {
 		return "", err
 	}
-	return result.URL, nil
+	return c.publicURL + result.URL, nil
 }
 
-// buildDashboard returns a Grafana dashboard JSON with CPU, Memory, and HTTP panels
-// scoped to the given project slug (kubernetes namespace = slug-dev).
+// buildDashboard returns a Grafana dashboard JSON with CPU, Memory, and HTTP
+// panels for the project, with an environment selector over its namespaces.
 func buildDashboard(slug string) map[string]any {
-	namespace := slug + "-dev"
+	ns := `namespace="$namespace"`
 	return map[string]any{
-		"title": slug + " — Overview",
-		"uid":   "kuberlauncher-dash-" + slug,
-		"tags":  []string{"kuberlauncher", slug},
-		"time":  map[string]string{"from": "now-1h", "to": "now"},
+		"title":   slug + " — Overview",
+		"uid":     "kuberlauncher-dash-" + slug,
+		"tags":    []string{"kuberlauncher", slug},
+		"time":    map[string]string{"from": "now-1h", "to": "now"},
 		"refresh": "30s",
+		"templating": map[string]any{
+			"list": []map[string]any{{
+				"name":    "namespace",
+				"label":   "Environment",
+				"type":    "custom",
+				"query":   strings.Join([]string{slug + "-dev", slug + "-staging", slug + "-prod"}, ","),
+				"current": map[string]string{"text": slug + "-dev", "value": slug + "-dev"},
+			}},
+		},
 		"panels": []map[string]any{
 			panel(1, "CPU Usage", 0, 0,
-				`sum(rate(container_cpu_usage_seconds_total{namespace="`+namespace+`"}[5m])) by (pod)`),
+				`sum(rate(container_cpu_usage_seconds_total{`+ns+`}[5m])) by (pod)`),
 			panel(2, "Memory Usage (MB)", 12, 0,
-				`sum(container_memory_working_set_bytes{namespace="`+namespace+`"}) by (pod) / 1024 / 1024`),
+				`sum(container_memory_working_set_bytes{`+ns+`}) by (pod) / 1024 / 1024`),
 			panel(3, "HTTP Requests/sec", 0, 8,
-				`sum(rate(http_requests_total{namespace="`+namespace+`"}[1m])) by (pod)`),
+				`sum(rate(http_requests_total{`+ns+`}[1m])) by (pod)`),
 		},
 	}
 }
@@ -130,8 +148,8 @@ func panel(id int, title string, x, y int, expr string) map[string]any {
 		},
 		"targets": []map[string]any{
 			{
-				"datasource": map[string]string{"type": "prometheus", "uid": "prometheus"},
-				"expr":       expr,
+				"datasource":   map[string]string{"type": "prometheus", "uid": "prometheus"},
+				"expr":         expr,
 				"legendFormat": "{{pod}}",
 			},
 		},

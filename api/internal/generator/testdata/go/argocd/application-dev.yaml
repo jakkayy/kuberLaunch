@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-service-dev
+  namespace: argocd
+spec:
+  project: demo-service
+  source:
+    repoURL: https://github.com/acme/demo-service
+    targetRevision: HEAD
+    path: helm
+    helm:
+      releaseName: demo-service
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo-service-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

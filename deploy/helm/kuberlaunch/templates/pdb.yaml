@@ -1,0 +1,16 @@
+{{- range $component := list "api" "web" }}
+{{- if gt (int (index $.Values $component).replicas) 1 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $.Release.Name }}-{{ $component }}
+  labels: {{- include "kuberlaunch.labels" $ | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      app.kubernetes.io/component: {{ $component }}
+{{- end }}
+{{- end }}

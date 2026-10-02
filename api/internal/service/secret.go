@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jakkayy/kuberlauncher/api/internal/repository"
+	"github.com/jakkayy/kuberlauncher/api/internal/validate"
 	"github.com/jakkayy/kuberlauncher/api/internal/vault"
 )
 
@@ -18,6 +19,12 @@ func NewSecretService(projectRepo *repository.ProjectRepository, vault *vault.Cl
 }
 
 func (s *SecretService) Set(ctx context.Context, projectID, key, value string) error {
+	if err := validate.SecretKey(key); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	if err := validate.SecretValue(value); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
 	p, err := s.projectRepo.FindByID(ctx, projectID)
 	if err != nil || p == nil {
 		return fmt.Errorf("project not found")

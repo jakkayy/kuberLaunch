@@ -9,8 +9,13 @@ import DeploymentHistory from './DeploymentHistory'
 import SetupMonitoring from './SetupMonitoring'
 import SecretsPanel from './SecretsPanel'
 import OneClickSetup from './OneClickSetup'
-import ArgoCDStatus from './ArgoCDStatus'
+import Environments from './Environments'
 import PodLogs from './PodLogs'
+import MembersPanel from './MembersPanel'
+import AuditLog from './AuditLog'
+import DeleteProject from './DeleteProject'
+import TemplateUpgrade from './TemplateUpgrade'
+import { roleAtLeast } from '@/app/lib/types'
 
 const RUNTIME_LABEL: Record<string, string> = {
   go: 'Go', nextjs: 'Next.js', nestjs: 'NestJS', fastapi: 'FastAPI',
@@ -43,6 +48,8 @@ export default async function ProjectPage({
   ].filter(Boolean).join(' · ')
 
   const latestDeployment = deployments[0]
+  const canMaintain = roleAtLeast(project.my_role, 'maintainer')
+  const canOwn = roleAtLeast(project.my_role, 'owner')
 
   return (
     <div>
@@ -65,13 +72,17 @@ export default async function ProjectPage({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <SetupMonitoring projectId={id} grafanaUrl={project.grafana_url ?? ''} />
-          <RegisterArgoCD
-            projectId={id}
-            argocdApp={project.argocd_app ?? ''}
-            hasRepo={!!project.repo_url}
-          />
-          <ConnectGitHub projectId={id} repoUrl={project.repo_url ?? ''} />
+          {canMaintain && (
+            <>
+              <SetupMonitoring projectId={id} grafanaUrl={project.grafana_url ?? ''} />
+              <RegisterArgoCD
+                projectId={id}
+                argocdApp={project.argocd_app ?? ''}
+                hasRepo={!!project.repo_url}
+              />
+              <ConnectGitHub projectId={id} repoUrl={project.repo_url ?? ''} />
+            </>
+          )}
           <a
             href={`/api/projects/${id}/download`}
             download
@@ -83,10 +94,12 @@ export default async function ProjectPage({
       </div>
 
       {/* Golden Path one-click setup */}
-      <OneClickSetup
-        projectId={id}
-        isFullySetup={!!(project.repo_url && project.argocd_app && project.grafana_url)}
-      />
+      {canMaintain && (
+        <OneClickSetup
+          projectId={id}
+          isFullySetup={!!(project.repo_url && project.argocd_app && project.grafana_url)}
+        />
+      )}
 
       {/* Status banners */}
       {project.repo_url && (
@@ -104,26 +117,42 @@ export default async function ProjectPage({
         </div>
       )}
 
-      <ArgoCDStatus projectId={id} argocdApp={project.argocd_app ?? ''} />
+      {canMaintain && project.latest_template_version && (
+        <TemplateUpgrade
+          projectId={id}
+          current={project.template_version}
+          latest={project.latest_template_version}
+        />
+      )}
+
+      <Environments projectId={id} registered={!!project.argocd_app} canPromote={canMaintain} canRollback={canOwn} />
 
       {/* Deploy section */}
       <div className="mb-6 border border-zinc-200 rounded-lg p-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-zinc-700">Deployments</h2>
-          <DeployButton
-            projectId={id}
-            hasRepo={!!project.repo_url}
-            latestDeployment={latestDeployment}
-          />
+          {canMaintain && (
+            <DeployButton
+              projectId={id}
+              hasRepo={!!project.repo_url}
+              latestDeployment={latestDeployment}
+            />
+          )}
         </div>
         <DeploymentHistory deployments={deployments} />
       </div>
 
       {/* Pod Logs */}
-      <PodLogs projectId={id} />
+      {canMaintain && <PodLogs projectId={id} />}
 
       {/* Secrets */}
-      <SecretsPanel projectId={id} />
+      <SecretsPanel projectId={id} canEdit={canMaintain} />
+
+      <MembersPanel projectId={id} canManage={canOwn} />
+
+      {canMaintain && <AuditLog projectId={id} />}
+
+      {canOwn && <DeleteProject projectId={id} slug={project.slug} />}
 
       {/* Generated files */}
       {files.length > 0 ? (

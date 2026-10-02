@@ -19,6 +19,7 @@ func (s DeploymentStatus) IsTerminal() bool {
 type Deployment struct {
 	ID            string           `json:"id"`
 	ProjectID     string           `json:"project_id"`
+	Environment   EnvName          `json:"environment"`
 	Branch        string           `json:"branch"`
 	WorkflowRunID *int64           `json:"workflow_run_id,omitempty"`
 	Image         string           `json:"image,omitempty"`

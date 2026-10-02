@@ -35,7 +35,7 @@ export default function CreateForm() {
           className="w-full border border-zinc-300 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-500"
         />
         <p className="text-xs text-zinc-400 mt-1">
-          lowercase + hyphens — used as Kubernetes namespace
+          Becomes the slug (lowercase letters, digits, hyphens; max 30, starts with a letter) used for the repo and Kubernetes namespaces
         </p>
       </div>
 
@@ -74,7 +74,6 @@ export default function CreateForm() {
           >
             <option value="postgres">PostgreSQL</option>
             <option value="mysql">MySQL</option>
-            <option value="mongodb">MongoDB</option>
             <option value="none">None</option>
           </select>
         </div>

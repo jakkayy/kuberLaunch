@@ -1,0 +1,26 @@
+# {{ .Env }} environment ({{ .EnvNamespace }}).
+{{- if eq .Env "dev" }}
+# CI updates image.tag here on every push to main.
+{{- else }}
+# image.tag changes only through a kuberLaunch promotion.
+{{- end }}
+replicaCount: {{ .Replicas }}
+{{- if eq .Env "prod" }}
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+{{- end }}
+
+image:
+  tag: "latest"
+
+ingress:
+  host: {{ .IngressHost }}
+{{- if eq .Database "postgres" }}
+
+database:
+  instances: {{ if eq .Env "prod" }}3{{ else }}1{{ end }}
+  storage: {{ if eq .Env "prod" }}10Gi{{ else }}1Gi{{ end }}
+{{- end }}

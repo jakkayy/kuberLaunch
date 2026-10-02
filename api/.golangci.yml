@@ -1,0 +1,27 @@
+version: "2"
+
+linters:
+  default: standard
+  settings:
+    errcheck:
+      exclude-functions:
+        # Closing readers/rows in defer and writing SSE frames have no useful recovery path.
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.DB).Close
+        - (*database/sql.Conn).Close
+        - fmt.Fprintf
+    staticcheck:
+      checks:
+        - all
+        - -ST1000 # package comments
+        - -ST1003 # naming (ArgocdApp etc. mirror DB columns)
+        - -ST1005 # error strings start with product names (GitHub, Vault, ...)
+        - -ST1020 # comment form on exported methods
+        - -ST1021
+        - -ST1022
+
+formatters:
+  enable:
+    - gofmt

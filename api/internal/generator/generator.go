@@ -6,6 +6,7 @@ import (
 	"embed"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/jakkayy/kuberlauncher/api/internal/model"
@@ -13,6 +14,40 @@ import (
 
 //go:embed all:templates
 var templateFS embed.FS
+
+// TemplateVersion identifies the generated file set. Bump it whenever a
+// template change should be offered to existing projects as an upgrade PR.
+//
+//	1: initial templates
+//	2: per-project Vault SecretStore, ArgoCD AppProject, CI concurrency
+//	3: dev/staging/prod environments, ServiceMonitor inside the Helm chart
+//	4: CI no longer needs cluster credentials (platform manages pull secrets)
+//	5: provisioned Postgres (CloudNativePG) and Redis, DATABASE_URL/REDIS_URL injected
+//	6: HPA (prod), PodDisruptionBudget, NetworkPolicy, liveness probe, security context
+const TemplateVersion = 6
+
+// Settings are platform-wide values rendered into every project.
+type Settings struct {
+	Owner string // GitHub owner of generated repos; "org" when empty
+
+	// VaultServer is the Vault address as seen from inside the cluster.
+	VaultServer string
+	// VaultAuthMount is the Kubernetes auth mount path in Vault.
+	VaultAuthMount string
+}
+
+func (s Settings) withDefaults() Settings {
+	if s.Owner == "" {
+		s.Owner = "org"
+	}
+	if s.VaultServer == "" {
+		s.VaultServer = "http://vault.vault.svc.cluster.local:8200"
+	}
+	if s.VaultAuthMount == "" {
+		s.VaultAuthMount = "kubernetes"
+	}
+	return s
+}
 
 type TemplateData struct {
 	Name     string
@@ -23,6 +58,34 @@ type TemplateData struct {
 	Port     int
 	Owner    string
 	Image    string
+
+	VaultServer    string
+	VaultAuthMount string
+	VaultRole      string
+	VaultSA        string
+
+	// Set only while rendering per-environment templates.
+	Env          string
+	EnvNamespace string
+	EnvApp       string
+	AutoSync     bool
+	Replicas     int
+	IngressHost  string
+}
+
+// forEnv returns d with the per-environment fields filled for env.
+func (d TemplateData) forEnv(env model.EnvName) TemplateData {
+	d.Env = string(env)
+	d.EnvNamespace = model.Namespace(d.Slug, env)
+	d.EnvApp = model.AppName(d.Slug, env)
+	d.AutoSync = env.AutoSync()
+	d.Replicas = 1
+	d.IngressHost = d.Slug + "-" + string(env) + ".local"
+	if env == model.EnvProd {
+		d.Replicas = 2
+		d.IngressHost = d.Slug + ".local"
+	}
+	return d
 }
 
 type GeneratedFile struct {
@@ -30,10 +93,8 @@ type GeneratedFile struct {
 	Content string
 }
 
-func Generate(p *model.Project, owner string) ([]GeneratedFile, error) {
-	if owner == "" {
-		owner = "org"
-	}
+func Generate(p *model.Project, settings Settings) ([]GeneratedFile, error) {
+	settings = settings.withDefaults()
 	data := TemplateData{
 		Name:     p.Name,
 		Slug:     p.Slug,
@@ -41,8 +102,14 @@ func Generate(p *model.Project, owner string) ([]GeneratedFile, error) {
 		Database: string(p.Database),
 		Cache:    string(p.Cache),
 		Port:     runtimePort(p.Runtime),
-		Owner:    owner,
-		Image:    fmt.Sprintf("ghcr.io/%s/%s:latest", owner, p.Slug),
+		Owner:    settings.Owner,
+		Image:    fmt.Sprintf("ghcr.io/%s/%s:latest", settings.Owner, p.Slug),
+
+		VaultServer:    settings.VaultServer,
+		VaultAuthMount: settings.VaultAuthMount,
+		// Must match vault.ProjectPolicyName / ProjectServiceAccount.
+		VaultRole: "kuberlaunch-" + p.Slug,
+		VaultSA:   p.Slug + "-vault",
 	}
 
 	templateSets := commonTemplates()
@@ -50,15 +117,40 @@ func Generate(p *model.Project, owner string) ([]GeneratedFile, error) {
 	templateSets = append(templateSets, runtimeSpecific...)
 
 	var files []GeneratedFile
-	for _, ts := range templateSets {
-		content, err := renderTemplate(ts.templatePath, data)
-		if err != nil {
-			return nil, fmt.Errorf("render %s: %w", ts.templatePath, err)
+	render := func(ts templateSpec, outputPath string, d TemplateData) error {
+		templatePath := ts.templatePath
+		var content string
+		var err error
+		if ts.raw {
+			var b []byte
+			b, err = templateFS.ReadFile(templatePath)
+			content = string(b)
+		} else {
+			content, err = renderTemplate(templatePath, d)
 		}
-		files = append(files, GeneratedFile{Path: ts.outputPath, Content: content})
+		if err != nil {
+			return fmt.Errorf("render %s: %w", templatePath, err)
+		}
+		files = append(files, GeneratedFile{Path: outputPath, Content: content})
+		return nil
+	}
+	for _, ts := range templateSets {
+		if err := render(ts, ts.outputPath, data); err != nil {
+			return nil, err
+		}
+	}
+	for _, ts := range envTemplates() {
+		for _, env := range model.Environments {
+			if err := render(ts, strings.ReplaceAll(ts.outputPath, "{env}", string(env)), data.forEnv(env)); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return files, nil
 }
+
+// ValuesFile is the Helm values file holding env's image tag.
+func ValuesFile(env model.EnvName) string { return "helm/values-" + string(env) + ".yaml" }
 
 func ToZip(files []GeneratedFile) ([]byte, error) {
 	var buf bytes.Buffer
@@ -81,26 +173,44 @@ func ToZip(files []GeneratedFile) ([]byte, error) {
 type templateSpec struct {
 	templatePath string
 	outputPath   string
+	// raw files are copied verbatim (pure Helm templates with no generator
+	// variables), avoiding {{ "{{" }} escaping.
+	raw bool
 }
 
 func commonTemplates() []templateSpec {
 	return []templateSpec{
-		{"templates/common/helm/Chart.yaml.tmpl", "helm/Chart.yaml"},
-		{"templates/common/helm/values.yaml.tmpl", "helm/values.yaml"},
-		{"templates/common/helm/templates/deployment.yaml.tmpl", "helm/templates/deployment.yaml"},
-		{"templates/common/helm/templates/externalsecret.yaml.tmpl", "helm/templates/externalsecret.yaml"},
-		{"templates/common/helm/templates/service.yaml.tmpl", "helm/templates/service.yaml"},
-		{"templates/common/helm/templates/ingress.yaml.tmpl", "helm/templates/ingress.yaml"},
-		{"templates/common/argocd/application.yaml.tmpl", "argocd/application.yaml"},
-		{"templates/common/github/ci.yml.tmpl", ".github/workflows/ci.yml"},
-		{"templates/common/monitoring/servicemonitor.yaml.tmpl", "monitoring/servicemonitor.yaml"},
+		{"templates/common/helm/Chart.yaml.tmpl", "helm/Chart.yaml", false},
+		{"templates/common/helm/values.yaml.tmpl", "helm/values.yaml", false},
+		{"templates/common/helm/templates/deployment.yaml.tmpl", "helm/templates/deployment.yaml", false},
+		{"templates/common/helm/templates/externalsecret.yaml.tmpl", "helm/templates/externalsecret.yaml", false},
+		{"templates/common/helm/templates/secretstore.yaml.tmpl", "helm/templates/secretstore.yaml", false},
+		{"templates/common/helm/templates/service.yaml.tmpl", "helm/templates/service.yaml", false},
+		{"templates/common/helm/templates/ingress.yaml.tmpl", "helm/templates/ingress.yaml", false},
+		{"templates/common/helm/templates/servicemonitor.yaml.tmpl", "helm/templates/servicemonitor.yaml", false},
+		{"templates/common/helm/templates/postgres.yaml", "helm/templates/postgres.yaml", true},
+		{"templates/common/helm/templates/redis.yaml", "helm/templates/redis.yaml", true},
+		{"templates/common/helm/templates/hpa.yaml", "helm/templates/hpa.yaml", true},
+		{"templates/common/helm/templates/pdb.yaml", "helm/templates/pdb.yaml", true},
+		{"templates/common/helm/templates/networkpolicy.yaml", "helm/templates/networkpolicy.yaml", true},
+		{"templates/common/argocd/appproject.yaml.tmpl", "argocd/appproject.yaml", false},
+		{"templates/common/github/ci.yml.tmpl", ".github/workflows/ci.yml", false},
+	}
+}
+
+// envTemplates are rendered once per environment; {env} in the output path
+// is replaced with the environment name.
+func envTemplates() []templateSpec {
+	return []templateSpec{
+		{"templates/common/helm/values-env.yaml.tmpl", "helm/values-{env}.yaml", false},
+		{"templates/common/argocd/application.yaml.tmpl", "argocd/application-{env}.yaml", false},
 	}
 }
 
 func runtimeTemplates(rt model.Runtime) []templateSpec {
 	return []templateSpec{
-		{fmt.Sprintf("templates/%s/Dockerfile.tmpl", rt), "Dockerfile"},
-		{fmt.Sprintf("templates/%s/.dockerignore.tmpl", rt), ".dockerignore"},
+		{fmt.Sprintf("templates/%s/Dockerfile.tmpl", rt), "Dockerfile", false},
+		{fmt.Sprintf("templates/%s/.dockerignore.tmpl", rt), ".dockerignore", false},
 	}
 }
 

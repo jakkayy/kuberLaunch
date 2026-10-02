@@ -37,7 +37,9 @@ services:
       timeout: 5s
       retries: 5
 
+  # Local debugging only: docker compose --profile tools up pgadmin
   pgadmin:
+    profiles: ["tools"]
     image: dpage/pgadmin4:latest
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@kuberlauncher.dev

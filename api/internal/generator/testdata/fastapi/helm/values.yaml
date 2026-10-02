@@ -1,0 +1,87 @@
+# Defaults shared by every environment. Per-environment overrides, including
+# the deployed image tag, live in values-<env>.yaml.
+replicaCount: 1
+
+image:
+  repository: ghcr.io/acme/demo-service
+  pullPolicy: IfNotPresent
+  pullSecret: "ghcr-secret"
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: true
+  className: nginx
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# When enabled, the HPA owns the replica count and replicaCount is ignored.
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilization: 70
+
+# Applied whenever more than one replica runs.
+podDisruptionBudget:
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  allowNamespaces:
+    - ingress-nginx
+    - monitoring
+    - cnpg-system
+
+env: []
+
+# Secrets are read from Vault path secret/kuberlauncher/demo-service by External
+# Secrets, authenticating as a dedicated service account (Vault Kubernetes auth)
+# that can read only this project's path.
+externalSecret:
+  enabled: true
+  refreshInterval: 1m
+  vault:
+    server: http://vault.vault.svc.cluster.local:8200
+    authMount: kubernetes
+    role: kuberlaunch-demo-service
+    serviceAccount: demo-service-vault
+
+monitoring:
+  # Requires the Prometheus Operator CRDs (kube-prometheus-stack).
+  serviceMonitor: true
+  path: /metrics
+
+# Backing services (see docs/adr/002-database-cache-provisioning.md).
+# provision: false means the app connects to an external service; put its
+# DATABASE_URL / REDIS_URL in Vault instead.
+database:
+  type: postgres
+  provision: true
+  instances: 1
+  storage: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+cache:
+  type: redis
+  provision: true
+  image: redis:7-alpine
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi

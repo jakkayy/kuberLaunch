@@ -1,73 +1,63 @@
 package handler
 
 import (
-	"bufio"
-	"context"
 	"fmt"
 	"net/http"
-	"os/exec"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jakkayy/kuberlauncher/api/internal/kube"
+	"github.com/jakkayy/kuberlauncher/api/internal/model"
 	"github.com/jakkayy/kuberlauncher/api/internal/service"
 )
 
 type LogsHandler struct {
 	projectSvc *service.ProjectService
+	kube       *kube.Client
 }
 
-func NewLogsHandler(svc *service.ProjectService) *LogsHandler {
-	return &LogsHandler{projectSvc: svc}
+func NewLogsHandler(svc *service.ProjectService, kube *kube.Client) *LogsHandler {
+	return &LogsHandler{projectSvc: svc, kube: kube}
 }
 
-// Stream streams pod logs via SSE using kubectl.
-// GET /api/v1/projects/:id/logs
+// Stream streams pod logs of one environment via SSE using the Kubernetes API.
+// GET /api/v1/projects/:id/logs?env=dev
 func (h *LogsHandler) Stream(c *gin.Context) {
 	id := c.Param("id")
+	env := model.EnvName(c.DefaultQuery("env", string(model.EnvDev)))
 
 	p, err := h.projectSvc.GetByID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
 		return
 	}
-
-	namespace := p.Slug + "-dev"
+	namespace, err := h.projectSvc.Namespace(c.Request.Context(), id, env)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
 	labelSelector := "app=" + p.Slug
 
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	c.Header("Access-Control-Allow-Origin", "*")
 
-	ctx, cancel := context.WithCancel(c.Request.Context())
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "kubectl", "logs",
-		"-n", namespace,
-		"-l", labelSelector,
-		"--all-containers=true",
-		"--follow=true",
-		"--tail=100",
-		"--prefix=true",
-	)
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		fmt.Fprintf(c.Writer, "data: {\"error\": \"failed to start log stream\"}\n\n")
-		c.Writer.Flush()
-		return
-	}
-	cmd.Stderr = cmd.Stdout
-
-	if err := cmd.Start(); err != nil {
-		fmt.Fprintf(c.Writer, "data: {\"error\": \"kubectl not available\"}\n\n")
+	if h.kube == nil {
+		fmt.Fprintf(c.Writer, "data: %s\n\n", jsonEscape("error: Kubernetes integration not configured"))
 		c.Writer.Flush()
 		return
 	}
 
-	scanner := bufio.NewScanner(stdout)
-	for scanner.Scan() {
-		line := scanner.Text()
+	ctx := c.Request.Context()
+	lines := make(chan string, 100)
+	errc := make(chan error, 1)
+	go func() { errc <- h.kube.StreamLogs(ctx, namespace, labelSelector, 100, lines) }()
+
+	for line := range lines {
 		fmt.Fprintf(c.Writer, "data: %s\n\n", jsonEscape(line))
+		c.Writer.Flush()
+	}
+	if err := <-errc; err != nil {
+		fmt.Fprintf(c.Writer, "data: %s\n\n", jsonEscape("error: "+err.Error()))
 		c.Writer.Flush()
 	}
 }

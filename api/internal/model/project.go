@@ -15,7 +15,6 @@ const (
 
 	DatabasePostgres Database = "postgres"
 	DatabaseMySQL    Database = "mysql"
-	DatabaseMongoDB  Database = "mongodb"
 	DatabaseNone     Database = "none"
 
 	CacheRedis Cache = "redis"
@@ -37,13 +36,18 @@ type Project struct {
 	ArgocdApp  string        `json:"argocd_app,omitempty" db:"argocd_app"`
 	GrafanaURL string        `json:"grafana_url,omitempty" db:"grafana_url"`
 	Status     ProjectStatus `json:"status" db:"status"`
-	CreatedAt  time.Time     `json:"created_at" db:"created_at"`
-	UpdatedAt  time.Time     `json:"updated_at" db:"updated_at"`
+	// TemplateVersion is the generator.TemplateVersion last applied to the repo.
+	TemplateVersion int `json:"template_version" db:"template_version"`
+	// LatestTemplateVersion is the current generator version (set per request).
+	LatestTemplateVersion int       `json:"latest_template_version,omitempty" db:"-"`
+	MyRole                Role      `json:"my_role,omitempty" db:"-"` // set per request
+	CreatedAt             time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at" db:"updated_at"`
 }
 
 type CreateProjectRequest struct {
 	Name     string   `json:"name" binding:"required,min=2,max=50"`
 	Runtime  Runtime  `json:"runtime" binding:"required,oneof=nextjs nestjs go fastapi"`
-	Database Database `json:"database" binding:"required,oneof=postgres mysql mongodb none"`
+	Database Database `json:"database" binding:"required,oneof=postgres mysql none"`
 	Cache    Cache    `json:"cache" binding:"required,oneof=redis none"`
 }

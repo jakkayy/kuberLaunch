@@ -1,0 +1,5 @@
+.env
+bin
+tmp
+*_test.go
+internal/generator/testdata

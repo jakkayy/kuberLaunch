@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 
-export default function SecretsPanel({ projectId }: { projectId: string }) {
+export default function SecretsPanel({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
   const [keys, setKeys] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [newKey, setNewKey] = useState('')
@@ -11,16 +11,21 @@ export default function SecretsPanel({ projectId }: { projectId: string }) {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [error, setError] = useState('')
 
-  const fetchKeys = useCallback(async () => {
-    const res = await fetch(`/api/projects/${projectId}/secrets`)
-    if (res.ok) {
-      const data = await res.json()
-      setKeys(data.keys ?? [])
-    }
-    setLoading(false)
-  }, [projectId])
+  // Bumping reloadToken re-runs the fetch effect after a change.
+  const [reloadToken, setReloadToken] = useState(0)
+  const fetchKeys = () => setReloadToken(t => t + 1)
 
-  useEffect(() => { fetchKeys() }, [fetchKeys])
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/projects/${projectId}/secrets`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (cancelled) return
+        if (data) setKeys(data.keys ?? [])
+        setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [projectId, reloadToken])
 
   async function addSecret(e: React.FormEvent) {
     e.preventDefault()
@@ -69,7 +74,7 @@ export default function SecretsPanel({ projectId }: { projectId: string }) {
       <h2 className="text-sm font-semibold text-zinc-700 mb-4">Secrets</h2>
 
       {/* Add secret form */}
-      <form onSubmit={addSecret} className="flex gap-2 mb-4">
+      {canEdit && <form onSubmit={addSecret} className="flex gap-2 mb-4">
         <input
           type="text"
           placeholder="KEY"
@@ -91,7 +96,7 @@ export default function SecretsPanel({ projectId }: { projectId: string }) {
         >
           {saving ? 'Saving…' : 'Add'}
         </button>
-      </form>
+      </form>}
 
       {error && <p className="text-xs text-red-500 mb-3">{error}</p>}
 
@@ -108,14 +113,16 @@ export default function SecretsPanel({ projectId }: { projectId: string }) {
               className="flex items-center justify-between px-3 py-2 bg-zinc-50 rounded font-mono text-xs"
             >
               <span className="text-zinc-700">{key}</span>
-              <button
-                onClick={() => deleteSecret(key)}
-                disabled={deleting === key}
-                className="text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors ml-4"
-                title="Delete"
-              >
-                {deleting === key ? '…' : '✕'}
-              </button>
+              {canEdit && (
+                <button
+                  onClick={() => deleteSecret(key)}
+                  disabled={deleting === key}
+                  className="text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors ml-4"
+                  title="Delete"
+                >
+                  {deleting === key ? '…' : '✕'}
+                </button>
+              )}
             </li>
           ))}
         </ul>

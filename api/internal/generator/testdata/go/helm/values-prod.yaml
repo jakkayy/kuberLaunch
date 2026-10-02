@@ -1,0 +1,18 @@
+# prod environment (demo-service-prod).
+# image.tag changes only through a kuberLaunch promotion.
+replicaCount: 2
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+
+image:
+  tag: "latest"
+
+ingress:
+  host: demo-service.local
+
+database:
+  instances: 3
+  storage: 10Gi

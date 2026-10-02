@@ -1,0 +1,113 @@
+# Public base URL; webhooks and OAuth callbacks are derived from it.
+publicURL: https://kuberlaunch.example.com
+
+ingress:
+  enabled: true
+  className: nginx
+  host: kuberlaunch.example.com
+  tls:
+    enabled: true
+    secretName: kuberlaunch-tls
+  annotations: {}
+
+api:
+  image:
+    repository: ghcr.io/jakkayy/kuberlaunch-api
+    tag: ""            # defaults to the chart appVersion
+    pullPolicy: IfNotPresent
+  replicas: 2
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 512Mi }
+  # Non-secret configuration (see api/.env.example). Secrets come from
+  # secrets.name and are passed as files (*_FILE / *_PATH).
+  env:
+    ENV: production
+    GITHUB_OWNER: ""
+    GITHUB_APP_ID: ""
+    GITHUB_APP_INSTALLATION_ID: ""
+    ARGOCD_URL: http://argocd-server.argocd.svc.cluster.local
+    ARGOCD_PUBLIC_URL: ""
+    GRAFANA_URL: http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local
+    GRAFANA_PUBLIC_URL: ""
+    GRAFANA_USERNAME: admin
+    VAULT_URL: http://vault.vault.svc.cluster.local:8200
+    VAULT_AUTH_METHOD: kubernetes
+    VAULT_K8S_ROLE: kuberlaunch-api
+    REGISTRY_PULL_USERNAME: ""
+    PLATFORM_ADMINS: ""
+
+web:
+  image:
+    repository: ghcr.io/jakkayy/kuberlaunch-web
+    tag: ""
+    pullPolicy: IfNotPresent
+  replicas: 2
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 512Mi }
+  env:
+    GITHUB_OAUTH_CLIENT_ID: ""
+    AUTH_ALLOWED_ORG: ""
+
+# Platform database. With postgresql.cnpg.enabled the chart runs an HA
+# CloudNativePG cluster and connects to it; otherwise set database.* to an
+# external (managed) PostgreSQL and put DB_PASSWORD in the platform secret.
+postgresql:
+  cnpg:
+    enabled: true
+    instances: 3          # 1 primary + 2 streaming replicas, automatic failover
+    storage: 20Gi
+    storageClass: ""
+    resources:
+      requests: { cpu: 250m, memory: 512Mi }
+      limits: { memory: 1Gi }
+    backup:
+      enabled: true
+      # Continuous WAL archiving + daily base backups (point-in-time recovery).
+      destinationPath: s3://kuberlaunch-backups/db
+      endpointURL: ""      # set for S3-compatible stores (MinIO, R2, ...)
+      # Secret with ACCESS_KEY_ID / ACCESS_SECRET_KEY for the bucket.
+      s3CredentialsSecret: kuberlaunch-backup-s3
+      retentionPolicy: 30d
+      schedule: "0 0 3 * * *"   # daily at 03:00 (seconds field first)
+
+database:
+  host: ""               # defaults to <release>-db-rw when cnpg is enabled
+  port: "5432"
+  name: kuberlauncher
+  user: kuberlauncher
+  sslmode: require
+
+# Secret with the platform's credentials. Keys are mounted as files.
+# With secrets.externalSecret.enabled it is synced from Vault
+# (secret/platform/kuberlaunch) by External Secrets.
+secrets:
+  name: kuberlaunch-secrets
+  externalSecret:
+    enabled: true
+    vaultServer: http://vault.vault.svc.cluster.local:8200
+    vaultPath: platform/kuberlaunch
+    vaultRole: kuberlaunch-platform-secrets
+    refreshInterval: 5m
+  # Keys expected in the secret, and the env var that points at each file.
+  files:
+    AUTH_JWT_SECRET: AUTH_JWT_SECRET_FILE
+    ARGOCD_TOKEN: ARGOCD_TOKEN_FILE
+    GRAFANA_PASSWORD: GRAFANA_PASSWORD_FILE
+    GITHUB_APP_PRIVATE_KEY: GITHUB_APP_PRIVATE_KEY_PATH
+    GITHUB_WEBHOOK_SECRET: GITHUB_WEBHOOK_SECRET_FILE
+    ARGOCD_WEBHOOK_TOKEN: ARGOCD_WEBHOOK_TOKEN_FILE
+    REGISTRY_PULL_TOKEN: REGISTRY_PULL_TOKEN_FILE
+
+serviceAccount:
+  name: kuberlaunch-api
+
+# Scrape the API's /metrics with the Prometheus Operator.
+monitoring:
+  serviceMonitor: true
+
+# Namespaces created for projects follow <slug>-<env>; the API needs
+# cluster-wide rights to create them and their pull secrets and to read pod logs.
+rbac:
+  create: true

@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { ENVIRONMENTS, EnvName } from '@/app/lib/types'
 
 export default function PodLogs({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState(false)
   const [lines, setLines] = useState<string[]>([])
   const [streaming, setStreaming] = useState(false)
+  const [env, setEnv] = useState<EnvName>('dev')
   const esRef = useRef<EventSource | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -18,7 +20,7 @@ export default function PodLogs({ projectId }: { projectId: string }) {
     setLines([])
     setStreaming(true)
 
-    const es = new EventSource(`/api/projects/${projectId}/logs`)
+    const es = new EventSource(`/api/projects/${projectId}/logs?env=${env}`)
     esRef.current = es
 
     es.onmessage = (e) => {
@@ -64,6 +66,14 @@ export default function PodLogs({ projectId }: { projectId: string }) {
               {streaming ? '● live' : '○ stopped'}
             </span>
           )}
+          <select
+            value={env}
+            onChange={e => setEnv(e.target.value as EnvName)}
+            disabled={open}
+            className="text-xs border border-zinc-300 rounded px-1.5 py-1 bg-white disabled:opacity-50"
+          >
+            {ENVIRONMENTS.map(e => <option key={e} value={e}>{e}</option>)}
+          </select>
           <button
             onClick={toggle}
             className="text-xs font-medium px-3 py-1 border border-zinc-300 rounded hover:bg-zinc-100 transition-colors"
